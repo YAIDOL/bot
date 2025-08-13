@@ -24,12 +24,13 @@ waiting_for_nick = set()
 # === Клавіатура ===
 main_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton("🗺️ Приключения"), KeyboardButton("🪨 Крафт")],
-        [KeyboardButton("👤 Профиль"), KeyboardButton("💪 Мой клан"),
-         KeyboardButton("🏆 Топ"), KeyboardButton("🛍️ Торговля")],
+        [KeyboardButton(text="🗺️ Приключения"), KeyboardButton(text="🪨 Крафт")],
+        [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="💪 Мой клан"),
+         KeyboardButton(text="🏆 Топ"), KeyboardButton(text="🛍️ Торговля")],
     ],
     resize_keyboard=True
 )
+
 
 # === Supabase функції ===
 def add_user(user_id, username):
