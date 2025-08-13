@@ -8,10 +8,9 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
 
 # ---------- ЗАВАНТАЖЕННЯ TOKEN ----------
-load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 if TOKEN is None:
-    raise ValueError("BOT_TOKEN не знайдено! Перевір .env файл")
+    raise ValueError("BOT_TOKEN не знайдено! Додай його у Render → Environment Variables")
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
