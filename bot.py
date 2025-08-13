@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from supabase import create_client, Client
+from supabase_py import create_client, Client
 
 # ---------- ENV VARIABLES ----------
 TOKEN = os.getenv("BOT_TOKEN")
