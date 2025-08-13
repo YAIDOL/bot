@@ -5,7 +5,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from dotenv import load_dotenv
 
 # ---------- ЗАВАНТАЖЕННЯ TOKEN ----------
 TOKEN = os.getenv("BOT_TOKEN")
@@ -71,7 +70,6 @@ async def handle_messages(message: types.Message):
     user_id = message.from_user.id
     text = message.text.strip()
 
-    # ----- Введення ника -----
     if user_id in waiting_for_nick:
         nickname = text
         if len(nickname) < 3:
@@ -86,42 +84,26 @@ async def handle_messages(message: types.Message):
         await message.answer(f"✅ Отлично, <b>{nickname}</b>! Никнейм сохранён.", reply_markup=main_menu_kb)
         return
 
-    # ----- ПРОФІЛЬ -----
     if text == "👤 Профиль":
         cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
         row = cursor.fetchone()
         if row:
-            (
-                _id, username, status, level, exp, exp_max,
-                health, defense, attack, money, diamonds,
-                head, body, legs, feet, weapon, bag
-            ) = row
-
+            (_id, username, status, level, exp, exp_max, health, defense, attack,
+             money, diamonds, head, body, legs, feet, weapon, bag) = row
             profile_text = (
                 f"<b>{username}</b> | <code>{user_id}</code>\n"
                 f"Статус аккаунта: {status}\n\n"
-                f"Уровень: {level}\n"
-                f"Опыт: {exp} / {exp_max}\n"
-                f"Характеристики: ❤️{health} | 🛡{defense} | 🗡{attack}\n\n"
-                f"🪙 Баланс:\n"
-                f"Деньги: {money} 💰\n"
-                f"Алмазы: {diamonds} 💎\n\n"
-                f"🥋 Одежда:\n"
-                f"Голова: {head}\n"
-                f"Тело: {body}\n"
-                f"Ноги: {legs}\n"
-                f"Ступни: {feet}\n\n"
-                f"🪛 Снаряжение:\n"
-                f"Оружие: {weapon}\n\n"
-                f"🧰 Сумка:\n"
-                f"{bag}"
+                f"Уровень: {level}\nОпыт: {exp} / {exp_max}\n"
+                f"❤️{health} | 🛡{defense} | 🗡{attack}\n\n"
+                f"🪙 Деньги: {money} 💰, Алмазы: {diamonds} 💎\n"
+                f"🥋 Одежда: Голова: {head}, Тело: {body}, Ноги: {legs}, Ступни: {feet}\n"
+                f"🪛 Снаряжение: Оружие: {weapon}\n🧰 Сумка: {bag}"
             )
             await message.answer(profile_text, reply_markup=main_menu_kb)
         else:
             waiting_for_nick.add(user_id)
             await message.answer("Никнейм не найден. Введите свой никнейм.")
 
-    # ----- ТОП -----
     elif text == "🏆 Топ":
         cursor.execute("SELECT username FROM users")
         players = cursor.fetchall()
@@ -131,7 +113,6 @@ async def handle_messages(message: types.Message):
         else:
             await message.answer("Список игроков пуст.", reply_markup=main_menu_kb)
 
-    # ----- ПРОСТІ КНОПКИ -----
     elif text in ["🗺️ Приключения", "🪨 Крафт", "💪 Мой клан", "🛍️ Торговля"]:
         await message.answer(f"Вы выбрали: <b>{text}</b>", reply_markup=main_menu_kb)
 
@@ -146,7 +127,7 @@ async def notify_users_on_start():
         try:
             await bot.send_message(user_id, "🤖 Бот працює ✅")
         except Exception:
-            pass  # якщо користувач заблокував бота
+            pass
 
 # ---------- ОСНОВНИЙ ЗАПУСК ----------
 async def main():
