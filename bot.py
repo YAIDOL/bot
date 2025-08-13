@@ -4,20 +4,23 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiosupabase import Supabase, create_client
+from supabase import create_client, Client
 
-# --- ENV ---
+# ENV
 TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
 if not TOKEN or not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("BOT_TOKEN, SUPABASE_URL або SUPABASE_KEY не задані!")
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
-supabase: Supabase = create_client(url=SUPABASE_URL, key=SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 waiting_for_nick = set()
+
+# Клавіатура
 main_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton("🗺️ Приключения"), KeyboardButton("🪨 Крафт")],
@@ -27,10 +30,11 @@ main_menu_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-async def add_user(user_id, nickname):
-    await supabase.table("users").upsert({
+# Supabase functions (sync)
+def add_user(user_id, username):
+    supabase.table("users").upsert({
         "user_id": user_id,
-        "username": nickname,
+        "username": username,
         "status": "Игрок",
         "level": 1,
         "exp": 0,
@@ -49,63 +53,77 @@ async def add_user(user_id, nickname):
         "premium_until": None
     }).execute()
 
-async def get_user(user_id):
-    res = await supabase.table("users").select("*").eq("user_id", user_id).execute()
-    return res.data[0] if res.data else None
+def get_user(user_id):
+    response = supabase.table("users").select("*").eq("user_id", user_id).execute()
+    return response.data[0] if response.data else None
+
+def get_all_users():
+    return supabase.table("users").select("*").execute().data
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    user = await get_user(message.from_user.id)
+    user = await asyncio.to_thread(get_user, message.from_user.id)
     if user and user.get("username"):
-        await message.answer(f"Привет, <b>{user['username']}</b>! Выбери кнопку ⬇️", reply_markup=main_menu_kb)
+        await message.answer(f"Привет, <b>{user['username']}</b>! Выбери кнопку ниже ⬇️", reply_markup=main_menu_kb)
     else:
         waiting_for_nick.add(message.from_user.id)
-        await message.answer("Привет! Напиши свой никнейм.")
+        await message.answer("Привет! Напиши, пожалуйста, свой никнейм.")
 
 @dp.message()
-async def handle_msg(msg: types.Message):
-    uid = msg.from_user.id
+async def handle_message(message: types.Message):
+    uid = message.from_user.id
+    text = message.text.strip()
+
     if uid in waiting_for_nick:
-        if len(msg.text.strip()) < 3:
-            return await msg.answer("Никнейм должен быть минимум 3 символа.")
-        await add_user(uid, msg.text.strip())
+        if len(text) < 3:
+            return await message.answer("❗ Никнейм должен быть минимум 3 символа.")
+        await asyncio.to_thread(add_user, uid, text)
         waiting_for_nick.remove(uid)
-        return await msg.answer(f"Ник сохранён: <b>{msg.text.strip()}</b>", reply_markup=main_menu_kb)
+        return await message.answer(f"✅ Отлично, <b>{text}</b>! Ник сохранён.", reply_markup=main_menu_kb)
 
-    if msg.text == "👤 Профиль":
-        user = await get_user(uid)
-        if not user:
+    if text == "👤 Профиль":
+        user = await asyncio.to_thread(get_user, uid)
+        if user:
+            await message.answer(
+                f"<b>{user['username']}</b> | <code>{uid}</code>\n"
+                f"Уровень: {user['level']} | Опыт: {user['exp']}/{user['exp_max']}\n"
+                f"❤️{user['health']} 🛡{user['defense']} 🗡{user['attack']}\n"
+                f"🪙 {user['money']} 💰 | 💎 {user['diamonds']}\n"
+                f"🥋 Одежда: Голова: {user['head']}, Тело: {user['body']}, Ноги: {user['legs']}, Ступни: {user['feet']}\n"
+                f"🪛 Оружие: {user['weapon']}, 🧰 Сумка: {user['bag']}\n"
+                f"⭐ Premium до: {user['premium_until'] or 'Нет'}",
+                reply_markup=main_menu_kb
+            )
+        else:
             waiting_for_nick.add(uid)
-            return await msg.answer("Никнейм не найден. Введи его.")
-        text = (
-            f"<b>{user['username']}</b> | <code>{uid}</code>\n"
-            f"Уровень {user['level']} | Опыт {user['exp']} / {user['exp_max']}\n"
-            f"❤️{user['health']} 🛡{user['defense']} 🗡{user['attack']}\n"
-            f"Деньги: {user['money']} | Алмазы: {user['diamonds']}\n"
-            f"Premium до: {user['premium_until'] or 'Нет'}"
-        )
-        return await msg.answer(text, reply_markup=main_menu_kb)
+            await message.answer("Профиль не найден. Введите ник.")
 
-    if msg.text == "🏆 Топ":
-        res = await supabase.table("users").select("username").execute()
-        players = res.data or []
-        if not players:
-            return await msg.answer("Список пуст.", reply_markup=main_menu_kb)
-        lst = "\n".join(f"{i+1}. {p['username']}" for i, p in enumerate(players))
-        return await msg.answer(f"🏆 Игроки:\n\n{lst}", reply_markup=main_menu_kb)
+    elif text == "🏆 Топ":
+        users = await asyncio.to_thread(get_all_users)
+        if users:
+            lst = "\n".join(f"{i+1}. {u['username']}" for i, u in enumerate(users))
+            await message.answer(f"🏆 Топ игроков:\n\n{lst}", reply_markup=main_menu_kb)
+        else:
+            await message.answer("Список пуст.", reply_markup=main_menu_kb)
 
-    await msg.answer("Неизвестная команда. Используй меню или /start.", reply_markup=main_menu_kb)
+    elif text in ["🗺️ Приключения", "🪨 Крафт", "💪 Мой клан", "🛍️ Торговля"]:
+        await message.answer(f"Вы выбрали: <b>{text}</b>", reply_markup=main_menu_kb)
 
-async def notify_all():
-    res = await supabase.table("users").select("user_id").execute()
-    for u in (res.data or []):
+    else:
+        await message.answer("❓ Неизвестная команда. Используй кнопки меню или напиши /start.", reply_markup=main_menu_kb)
+
+# Повідомлення при запуску
+async def notify_users_on_start():
+    users = await asyncio.to_thread(get_all_users)
+    for u in users:
         try:
-            await bot.send_message(u["user_id"], "Бот запущен!")
+            await bot.send_message(u["user_id"], "🤖 Бот запущен!")
         except:
             pass
 
+# Запуск
 async def main():
-    await notify_all()
+    await notify_users_on_start()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
