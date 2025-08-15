@@ -1,6 +1,7 @@
 import os
 import asyncio
 import re
+import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -72,6 +73,17 @@ CLANS = {
     )
 }
 
+# пробудження бота
+async def ping_fly_machine():
+    url = "https://bot-amackg.fly.dev"  # заміни на свою адресу, якщо інша
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=3) as response:
+                if response.status == 200:
+                    print("🟢 Fly.io машина розбуджена")
+    except Exception as e:
+        print(f"⚠️ Не вдалося пінгонути машину: {e}")
+
 # ---------- Функція для показу вибору клану ----------
 async def ask_clan_choice(message: types.Message):
     buttons = [
@@ -109,6 +121,8 @@ async def cmd_start(message: types.Message):
 # ---------- Обробка повідомлень ----------
 @dp.message()
 async def handle_messages(message: types.Message):
+    await ping_fly_machine()
+    
     user_id = message.from_user.id
     text = message.text.strip()
 
