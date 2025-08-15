@@ -1,17 +1,19 @@
-# fly.toml app configuration file generated for bot-amackg on 2025-08-15T09:19:08Z
+# fly.toml app configuration file generated for bot-amackg on 2025-08-15T18:34:38Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
 app = 'bot-amackg'
-primary_region = 'ams'
+primary_region = 'waw'
 
 [build]
 
 [http_service]
   internal_port = 8080
   force_https = true
-  min_machines_running = 1
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
   processes = ['app']
 
 [[vm]]
