@@ -364,9 +364,25 @@ async def notify_users_on_start():
             pass
 
 # ---------- ОСНОВНИЙ ЗАПУСК ----------
+app = FastAPI()
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
+def run_fastapi():
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="info")
+
+# Основна async-функція бота
 async def main():
     await notify_users_on_start()
     await dp.start_polling(bot)
 
+# Головний запуск
 if __name__ == "__main__":
+    # Запуск FastAPI-сервера у фоновому потоці
+    threading.Thread(target=run_fastapi, daemon=True).start()
+
+    # Запуск Telegram-бота
+    import asyncio
     asyncio.run(main())
