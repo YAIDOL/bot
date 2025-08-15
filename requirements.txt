@@ -1,3 +1,7 @@
 aiogram==3.*
 supabase==2.*
 python-dotenv==1.*
+
+# Для запуска FastAPI-сервера
+fastapi==0.110.*
+uvicorn[standard]==0.29.*
