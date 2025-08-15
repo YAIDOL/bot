@@ -123,7 +123,7 @@ async def handle_messages(message: types.Message):
                 f"❤️{row['health']} | 🛡{row['defense']} | 🗡{row['attack']}\n\n"
                 f"💰 Деньги: {row['money']} | 💎 Алмазы: {row['diamonds']}\n\n"
                 f"🥋 Экипировка:\n"
-                f"Голова: {row['head']}\n, Тело: {row['body']}\n, Ноги: {row['legs']}\n, Ступни: {row['feet']}\n"
+                f"Голова: {row['head']}\nТело: {row['body']}\nНоги: {row['legs']}\nСтупни: {row['feet']}\n"
                 f"Оружие: {row['weapon']}\n"
                 f"Сумка: {row['bag']}\n\n"
                 f"💪 Клан: {row.get('clan', 'нет')}\n{clan_desc}"
