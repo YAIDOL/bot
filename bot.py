@@ -1,5 +1,6 @@
 import os
 import asyncio
+import re
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -115,9 +116,29 @@ async def handle_messages(message: types.Message):
     # --- У handle_messages: після введення ніку (ні кнопки меню) ---
     if user_id in waiting_for_nick:
         nickname = text
-        if len(nickname) < 3:
-            await message.answer("❗ Никнейм должен быть минимум 3 символа, попробуй ещё раз.")
+
+        # 1. Заборонені символи
+        if re.search(r"[;:/.\"<>'\\\\]", nickname):
+            await message.answer(
+                "❗ Никнейм содержит недопустимые символы. Используй только буквы, цифры и подчёркивания.")
             return
+
+        # 2. Заборонене слово "script"
+        if "script" in nickname.lower():
+            await message.answer("❗ Никнейм не может содержать запрещённые слова.")
+            return
+
+        # 3. Перевірка довжини
+        if not (3 <= len(nickname) <= 9):
+            await message.answer("❗ Никнейм должен быть от 3 до 9 символов.")
+            return
+
+        # 4. Дозволені лише латиниця/цифри/_
+        if not re.match(r"^[A-Za-z0-9_]+$", nickname):
+            await message.answer("❗ Никнейм должен содержать только латинские буквы, цифры и подчёркивания.")
+            return
+
+        # Все ок — зберігаємо
         supabase.table("users").upsert({"user_id": user_id, "username": nickname}).execute()
         waiting_for_nick.remove(user_id)
         await message.answer(f"✅ Отлично, <b>{nickname}</b>! Никнейм сохранён.\nТеперь выбери клан.")
