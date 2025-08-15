@@ -11,9 +11,9 @@ primary_region = "ams"
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "never"      # НЕ останавливать машины автоматически
-  auto_start_machines = true
-  min_machines_running = 1           # минимум 1 машина всегда включена
+  auto_stop_machines = "stop"       # Позволяет останавливать машину при простое
+  auto_start_machines = true        # Позволяет автоматически запускать машину при запросе
+  min_machines_running = 0          # Позволяет остановить все машины, запуск будет по запросу
   processes = ["app"]
 
 [[vm]]
