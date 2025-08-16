@@ -114,11 +114,157 @@ ADVENTURES = {
 }
 
 LOCATIONS = {
-    "Большой Лес": {"exp": (10, 30), "money": (20, 40), "duration": 5},  # 5 секунд
-    "Мёртвая Деревня": {"exp": (20, 50), "money": (30, 60), "duration": 10},
-    "Заброшенный Замок": {"exp": (40, 60), "money": (50, 80), "duration": 15},
+    "Большой Лес": {
+        "exp": (5, 10),
+        "money": (10, 20),
+        "duration": 15,
+        "min_level": 1
+    },
+    "Мёртвая Деревня": {
+        "exp": (15, 30),
+        "money": (20, 40),
+        "duration": 30,
+        "min_level": 10
+    },
+    "Заброшенный Замок": {
+        "exp": (40, 60),
+        "money": (50, 100),
+        "duration": 60,
+        "min_level": 20
+    }
 }
 
+MONSTERS = {
+    "Туманный Волк": {
+        "hp": 100, "damage": 20, "dodge": 10, "counter": 0,
+        "description": "Хищник, скрывающийся в тумане. Быстрый и коварный.",
+        "rarity": "common"
+    },
+    "Древесный Страж": {
+        "hp": 150, "damage": 10, "dodge": 0, "counter": 20,
+        "description": "Существо из корней и листвы. Защищает лес от незваных гостей.",
+        "rarity": "common"
+    },
+    "Лесной Жутень": {
+        "hp": 100, "damage": 20, "dodge": 30, "counter": 10,
+        "description": "Тварь, порождённая страхами путников. Питается страхом и болью.",
+        "rarity": "rare"
+    },
+    "Призрачный Олень": {
+        "hp": 70, "damage": 10, "dodge": 50, "counter": 0,
+        "description": "Легендарный дух леса. Встреча с ним — знак судьбы.",
+        "rarity": "rare"
+    },
+    "Корнеплет": {
+        "hp": 200, "damage": 15, "dodge": 0, "counter": 30,
+        "description": "Существо из земли и ветвей. Захватывает добычу корнями.",
+        "rarity": "epic"
+    },
+
+    "Безглазый Житель": {
+        "hp": 150, "damage": 20, "dodge": 30, "counter": 10,
+        "description": "Когда-то человек. Теперь лишь оболочка, бродящая по деревне.",
+        "rarity": "common"
+    },
+    "Пепельный Пёс": {
+        "hp": 70, "damage": 50, "dodge": 30, "counter": 5,
+        "description": "Пёс из пепла и криков. Ищет своего хозяина в вечной муке.",
+        "rarity": "common"
+    },
+    "Колоколий": {
+        "hp": 200, "damage": 30, "dodge": 5, "counter": 40,
+        "description": "Ржавый колокол вместо головы. Его звон парализует страхом.",
+        "rarity": "rare"
+    },
+    "Сломанный Кукловод": {
+        "hp": 100, "damage": 20, "dodge": 60, "counter": 0,
+        "description": "Мастер марионеток, ставший одной из них.",
+        "rarity": "rare"
+    },
+    "Жнец Молчания": {
+        "hp": 500, "damage": 20, "dodge": 0, "counter": 20,
+        "description": "Собирает души тех, кто кричал в темноте. Никогда не говорит.",
+        "rarity": "epic"
+    },
+    "Блуждающий Рыцарь": {
+        "hp": 150, "damage": 70, "dodge": 10, "counter": 50,
+        "description": "Когда-то защитник замка. Теперь лишь тень в броне.",
+        "rarity": "common"
+    },
+    "Призрачная Дева": {
+        "hp": 400, "damage": 30, "dodge": 20, "counter": 30,
+        "description": "Появляется в тишине. Её плач слышен даже сквозь стены.",
+        "rarity": "common"
+    },
+    "Гаргулья-Караульщица": {
+        "hp": 1000, "damage": 10, "dodge": 5, "counter": 5,
+        "description": "Каменное чудовище, что охраняет руины. Неустанна и беспощадна.",
+        "rarity": "rare"
+    },
+    "Книжный Ужас": {
+        "hp": 500, "damage": 200, "dodge": 0, "counter": 0,
+        "description": "Созданный из запретных знаний. Поглощает разум.",
+        "rarity": "rare"
+    },
+    "Старый Ключник": {
+        "hp": 2000, "damage": 100, "dodge": 20, "counter": 30,
+        "description": "Хранитель замка. Без него двери не открываются... и не закрываются.",
+        "rarity": "epic"
+    }
+}
+
+RARITY_CHANCES = {
+    "epic": 10,
+    "rare": 30,
+    "common": 60
+}
+
+
+def get_random_monster(location_mobs: list):
+    rarity_pool = {
+        "epic": [],
+        "rare": [],
+        "common": []
+    }
+
+    for name in location_mobs:
+        monster = MONSTERS.get(name)
+        if not monster:
+            continue
+        rarity = monster.get("rarity", "common")
+        rarity
+
+
+import random
+
+
+def get_random_monster(location_mobs: list):
+    rarity_pool = {
+        "epic": [],
+        "rare": [],
+        "common": []
+    }
+
+    for name in location_mobs:
+        monster = MONSTERS.get(name)
+        if not monster:
+            continue
+        rarity = monster.get("rarity", "common")
+        monster = monster.copy()
+        monster["name"] = name
+        rarity_pool[rarity].append(monster)
+
+    rarity = random.choices(
+        population=list(RARITY_CHANCES.keys()),
+        weights=list(RARITY_CHANCES.values()),
+        k=1
+    )[0]
+
+    pool = rarity_pool.get(rarity)
+    if not pool:
+        pool = rarity_pool["common"]
+
+    return random.choice(pool)
 
 # ---------- Clan selection ----------
 async def ask_clan_choice(message: types.Message):
@@ -158,46 +304,61 @@ async def start_adventure(message: types.Message, location_name: str):
         await message.answer("❗ Приключение не найдено.")
         return
 
-    duration = location["duration"]  # Время в секундах
+    duration = location["duration"]
     user_id = message.from_user.id
 
-    mob = random.choice(adventure["mobs"])
+    # Випадковий монстр з урахуванням рідкості
+    monster = get_random_monster(adventure['mobs'])
+
+    name = monster["name"]
+    hp = monster["hp"]
+    dmg = monster["damage"]
+    dodge = monster["dodge"]
+    counter = monster["counter"]
+    desc = monster["description"]
+    rarity = monster["rarity"].capitalize()
+
+    # Повідомлення про початок пригоди та зустріч з монстром
+    await message.answer(
+        f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n\n"
+        f"👾 <b>Вы встретили монстра: {name}</b>\n"
+        f"📖 <i>{desc}</i>\n"
+        f"🏷 Редкость: <b>{rarity}</b>\n\n"
+        f"❤️ Здоровье: <b>{hp}</b>\n"
+        f"💥 Урон: <b>{dmg}</b>\n"
+        f"🌀 Уклонение: <b>{dodge}%</b>\n"
+        f"🔁 Контратака: <b>{counter}%</b>\n\n"
+        f"⏳ Приключение продлится <b>{duration}</b> секунд..."
+    )
+
+    # Очікуємо завершення
+    await asyncio.sleep(duration)
+
+    # Генеруємо нагороду
     exp = random.randint(*location["exp"])
     money = random.randint(*location["money"])
 
-    # Оповещение о начале
-    await message.answer(
-        f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n"
-        f"👾 Встречаешь: <b>{mob}</b>\n"
-        f"⏳ Приключение продлится <b>{duration} секунд...</b>\n"
-        f"🔕 Кнопка запуска отключена."
-    )
-
-    # Ожидаем время приключения
-    await asyncio.sleep(duration)
-
-    # Получаем текущее количество денег
+    # Отримуємо гроші користувача
     user_resp = supabase.table("users").select("money").eq("user_id", user_id).execute()
     current_money = user_resp.data[0]["money"] if user_resp.data else 0
 
-    # Обновляем EXP
+    # Оновлюємо досвід та гроші
     await add_experience(user_id, exp)
-
-    # Обновляем деньги
     supabase.table("users").update({
         "money": current_money + money
     }).eq("user_id", user_id).execute()
 
-    # Сообщение о завершении
+    # Підсумок
     await bot.send_message(
         user_id,
         f"✅ <b>Приключение завершено!</b>\n\n"
         f"🏞️ Локация: <b>{location_name}</b>\n"
-        f"⚔️ Побежден враг: <b>{mob}</b>\n\n"
+        f"⚔️ Побежден враг: <b>{name}</b>\n\n"
         f"🎖 Получено опыта: <b>{exp}</b>\n"
         f"💰 Найдено монет: <b>{money}</b>",
         reply_markup=main_menu_kb
     )
+
 
 # ---------- Обработка сообщений ----------
 @dp.message()
@@ -246,30 +407,28 @@ async def handle_messages(message: types.Message):
         else:
             waiting_for_nick.add(user_id)
             await message.answer("Никнейм не найден. Введите свой никнейм.")
-
-
-
-
-
     elif text == "🗺️ Приключения":
         locations_info = ""
         for name, data in LOCATIONS.items():
+            if name not in ADVENTURES:
+                continue
             exp_range = f"{data['exp'][0]}–{data['exp'][1]}"
             money_range = f"{data['money'][0]}–{data['money'][1]}"
             duration = data["duration"]
+            min_level = data.get("min_level", 1)
             locations_info += (
                 f"📍 <b>{name}</b>\n"
                 f"{ADVENTURES[name]['description']}\n"
+                f"🔒 Требуемый уровень: <b>{min_level}</b>\n"
                 f"🎖 Опыт: <b>{exp_range}</b> | 💰 Монеты: <b>{money_range}</b> | ⏱ Время: {duration} сек.\n\n"
             )
-        # Кнопки с названиями приключений
+
         buttons = [
             [InlineKeyboardButton(text=name, callback_data=f"preview_{name}")]
-            for name in ADVENTURES.keys()
+            for name in LOCATIONS.keys() if name in ADVENTURES
         ]
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         await message.answer(f"🌍 <b>Приключения:</b>\n\n{locations_info}", reply_markup=keyboard)
-
 
 
 
@@ -336,12 +495,12 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             clan_key = data[5:]
             clan_name = next((name for name in CLANS if name.startswith(clan_key)), None)
             if not clan_name:
-                await callback.answer("Помилка: клан не знайдено.", show_alert=True)
+                await callback.answer("❗ Ошибка: клан не найден.", show_alert=True)
                 return
             desc = CLANS[clan_name]
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="Вибрати", callback_data=f"select_{clan_key}"),
+                    InlineKeyboardButton(text="Выбрать", callback_data=f"select_{clan_key}"),
                     InlineKeyboardButton(text="Назад", callback_data="back_to_clans")
                 ]
             ])
@@ -352,14 +511,14 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             clan_key = data[7:]
             clan_name = next((name for name in CLANS if name.startswith(clan_key)), None)
             if not clan_name:
-                await callback.answer("Помилка: клан не знайдено.", show_alert=True)
+                await callback.answer("❗ Ошибка: клан не найден.", show_alert=True)
                 return
 
             supabase.table("users").update({"clan": clan_name}).eq("user_id", user_id).execute()
             supabase.table("clan_members").upsert({"clan_name": clan_name, "user_id": user_id}).execute()
 
-            await callback.message.edit_text(f"Ви успішно вибрали клан:\n\n{CLANS[clan_name]}")
-            await bot.send_message(user_id, "Тепер тобі доступне головне меню ⬇️", reply_markup=main_menu_kb)
+            await callback.message.edit_text(f"✅ Вы успешно выбрали клан:\n\n{CLANS[clan_name]}")
+            await bot.send_message(user_id, "Теперь тебе доступно главное меню ⬇️", reply_markup=main_menu_kb)
 
         elif data == "back_to_clans":
             await callback.answer()
@@ -370,7 +529,7 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             location_name = data[len("adventure_"):]
             adventure = ADVENTURES.get(location_name)
             if not adventure:
-                await callback.answer("❗ Пригоди не знайдено.", show_alert=True)
+                await callback.answer("❗ Приключение не найдено.", show_alert=True)
                 return
 
             mob_preview = random.choice(adventure["mobs"])
@@ -379,16 +538,16 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             money_range = f"{location_info['money'][0]}–{location_info['money'][1]}"
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🚀 Почати пригоду", callback_data=f"start_adv_{location_name}")],
+                [InlineKeyboardButton(text="🚀 Начать приключение", callback_data=f"start_adv_{location_name}")],
                 [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_adventures")]
             ])
 
             await callback.message.edit_text(
                 f"📍 <b>{location_name}</b>\n"
                 f"{adventure['description']}\n\n"
-                f"👾 Можливі вороги: <i>{', '.join(adventure['mobs'])}</i>\n"
-                f"🎖 Досвід: <b>{exp_range}</b>\n"
-                f"💰 Монети: <b>{money_range}</b>\n",
+                f"👾 Возможные враги: <i>{', '.join(adventure['mobs'])}</i>\n"
+                f"🎖 Опыт: <b>{exp_range}</b>\n"
+                f"💰 Монеты: <b>{money_range}</b>",
                 reply_markup=keyboard
             )
 
@@ -399,23 +558,23 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             location = LOCATIONS.get(location_name)
 
             if not adventure or not location:
-                await callback.answer("❗ Локація не знайдена.", show_alert=True)
+                await callback.answer("❗ Локация не найдена.", show_alert=True)
                 return
 
             exp_range = f"{location['exp'][0]}–{location['exp'][1]}"
             money_range = f"{location['money'][0]}–{location['money'][1]}"
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🚀 Почати пригоду", callback_data=f"start_adv_{location_name}")],
+                [InlineKeyboardButton(text="🚀 Начать приключение", callback_data=f"start_adv_{location_name}")],
                 [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_adventures")]
             ])
 
             await callback.message.edit_text(
                 f"📍 <b>{location_name}</b>\n"
                 f"{adventure['description']}\n\n"
-                f"👾 Можливі вороги: <i>{', '.join(adventure['mobs'])}</i>\n"
-                f"🎖 Досвід: <b>{exp_range}</b>\n"
-                f"💰 Монети: <b>{money_range}</b>",
+                f"👾 Возможные враги: <i>{', '.join(adventure['mobs'])}</i>\n"
+                f"🎖 Опыт: <b>{exp_range}</b>\n"
+                f"💰 Монеты: <b>{money_range}</b>",
                 reply_markup=keyboard
             )
 
@@ -423,9 +582,19 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             await callback.answer()
             location_name = data[len("start_adv_"):]
             location = LOCATIONS.get(location_name)
+            location = LOCATIONS.get(location_name)
             if not location:
-                await callback.answer("❗ Локація не знайдена.", show_alert=True)
+                await callback.answer("❗ Локация не найдена.", show_alert=True)
                 return
+
+            user_data = supabase.table("users").select("level").eq("user_id", user_id).execute()
+            user_level = user_data.data[0]["level"] if user_data.data else 1
+            required_level = location.get("min_level", 1)
+
+            if user_level < required_level:
+                await callback.answer(f"🔒 Доступно с {required_level} уровня.", show_alert=True)
+                return
+
             now = datetime.utcnow()
             existing_status = supabase.table("adventure_status").select("*").eq("user_id", user_id).execute()
             if existing_status.data:
@@ -433,7 +602,7 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                 end_time = datetime.fromisoformat(end_time_str)
                 if end_time > now:
                     remaining = (end_time - now).seconds
-                    await callback.answer(f"⏳ Ти вже в пригоді! Залишилось {remaining} сек.", show_alert=True)
+                    await callback.answer(f"⏳ Ты уже в приключении! Осталось {remaining} сек.", show_alert=True)
                     return
                 else:
                     supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
@@ -441,7 +610,16 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             duration = location["duration"]
             end_time = now + timedelta(seconds=duration)
             adventure = ADVENTURES.get(location_name)
-            mob = random.choice(adventure["mobs"])
+            monster = get_random_monster(adventure["mobs"])
+
+            mob = monster["name"]
+            desc = monster["description"]
+            hp = monster["hp"]
+            dmg = monster["damage"]
+            dodge = monster["dodge"]
+            counter = monster["counter"]
+            rarity = monster["rarity"].capitalize()
+
             exp = random.randint(*location["exp"])
             money = random.randint(*location["money"])
 
@@ -458,9 +636,15 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
 
             await bot.send_message(
                 user_id,
-                f"🏃‍♂️ Ти відправився у <b>{location_name}</b>\n"
-                f"👾 Зустрів: <b>{mob}</b>\n"
-                f"⏳ Тривалість: <b>{duration} сек.</b>"
+                f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n\n"
+                f"👾 <b>Вы встретили монстра: {mob}</b>\n"
+                f"📖 <i>{desc}</i>\n"
+                f"🏷 Редкость: <b>{rarity}</b>\n\n"
+                f"❤️ Здоровье: <b>{hp}</b>\n"
+                f"💥 Урон: <b>{dmg}</b>\n"
+                f"🌀 Уклонение: <b>{dodge}%</b>\n"
+                f"🔁 Контратака: <b>{counter}%</b>\n\n"
+                f"⏳ Приключение продлится <b>{duration}</b> сек."
             )
 
             await asyncio.sleep(duration)
@@ -475,11 +659,11 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
 
             await bot.send_message(
                 user_id,
-                f"✅ <b>Пригода завершена!</b>\n\n"
-                f"🏞️ Локація: <b>{location_name}</b>\n"
-                f"⚔️ Переможений ворог: <b>{mob}</b>\n\n"
-                f"🎖 Досвід: <b>{exp}</b>\n"
-                f"💰 Монети: <b>{money}</b>",
+                f"✅ <b>Приключение завершено!</b>\n\n"
+                f"🏞️ Локация: <b>{location_name}</b>\n"
+                f"⚔️ Побежденный враг: <b>{mob}</b>\n\n"
+                f"🎖 Получено опыта: <b>{exp}</b>\n"
+                f"💰 Получено монет: <b>{money}</b>",
                 reply_markup=main_menu_kb
             )
 
@@ -490,13 +674,15 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                 for name, emoji in zip(ADVENTURES.keys(), ["🌲", "🏚️", "🏰"])
             ]
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-            await callback.message.edit_text("🌍 <b>Обери локацію:</b>", reply_markup=keyboard)
+            await callback.message.edit_text("🌍 <b>Выбери локацию:</b>", reply_markup=keyboard)
 
         else:
-            await callback.answer("Невідома дія.", show_alert=True)
+            await callback.answer("❓ Неизвестное действие.", show_alert=True)
+
     except Exception as e:
-        await callback.answer("Сталася помилка, спробуйте пізніше.", show_alert=True)
+        await callback.answer("⚠️ Произошла ошибка. Попробуйте позже.", show_alert=True)
         print(f"Callback error: {e}")
+
 
 # ---------- Run bot ----------
 async def main():
