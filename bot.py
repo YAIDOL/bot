@@ -10,6 +10,8 @@ from aiogram.client.default import DefaultBotProperties
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
+
+
 # ---------- Load environment ----------
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -328,183 +330,173 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     data = callback.data
 
-    if data.startswith("clan_"):
-        # Показать описание клана
-        clan_key = data[5:]
-        clan_name = next((name for name in CLANS if name.startswith(clan_key)), None)
-        if not clan_name:
-            await callback.answer("Ошибка: клан не найден.")
-            return
-        desc = CLANS[clan_name]
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Выбрать", callback_data=f"select_{clan_key}"),
-                InlineKeyboardButton(text="Назад", callback_data="back_to_clans")
-            ]
-        ])
-        await callback.message.edit_text(desc, reply_markup=keyboard)
-        await callback.answer()
-
-    elif data.startswith("select_"):
-        # Выбор клана
-        clan_key = data[7:]
-        clan_name = next((name for name in CLANS if name.startswith(clan_key)), None)
-        if not clan_name:
-            await callback.answer("Ошибка: клан не найден.")
-            return
-
-        supabase.table("users").update({"clan": clan_name}).eq("user_id", user_id).execute()
-        supabase.table("clan_members").upsert({"clan_name": clan_name, "user_id": user_id}).execute()
-
-        await callback.message.edit_text(f"Вы успешно выбрали клан:\n\n{CLANS[clan_name]}")
-        await bot.send_message(user_id, "Теперь тебе доступно главное меню ⬇️", reply_markup=main_menu_kb)
-        await callback.answer("Клан выбран!")
-
-    elif data == "back_to_clans":
-        # Вернуться к выбору клана
-        await ask_clan_choice(callback.message)
-        await callback.answer()
-
-    elif data.startswith("adventure_"):
-        # Показать превью приключения
-        location_name = data[len("adventure_"):]
-        adventure = ADVENTURES.get(location_name)
-        if not adventure:
-            await callback.answer("❗ Приключение не найдено.")
-            return
-
-        mob_preview = random.choice(adventure["mobs"])
-        location_info = LOCATIONS[location_name]
-        exp_range = f"{location_info['exp'][0]}–{location_info['exp'][1]}"
-        money_range = f"{location_info['money'][0]}–{location_info['money'][1]}"
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Начать приключение", callback_data=f"start_adv_{location_name}")],
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_adventures")]
-        ])
-
-        await callback.message.edit_text(
-            f"📍 <b>{location_name}</b>\n"
-            f"{adventure['description']}\n\n"
-            f"👾 Возможные враги: <i>{', '.join(adventure['mobs'])}</i>\n"
-            f"🎖 Опыт: <b>{exp_range}</b>\n"
-            f"💰 Монеты: <b>{money_range}</b>\n",
-            reply_markup=keyboard
-        )
-        await callback.answer()
-
-    elif data.startswith("preview_"):
-        # Просмотр описания локации (если используется preview_)
-        location_name = data[len("preview_"):]
-        adventure = ADVENTURES.get(location_name)
-        location = LOCATIONS.get(location_name)
-
-        if not adventure or not location:
-            await callback.answer("❗ Локация не найдена.")
-            return
-
-        exp_range = f"{location['exp'][0]}–{location['exp'][1]}"
-        money_range = f"{location['money'][0]}–{location['money'][1]}"
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Начать приключение", callback_data=f"start_adv_{location_name}")],
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_adventures")]
-        ])
-
-        await callback.message.edit_text(
-            f"📍 <b>{location_name}</b>\n"
-            f"{adventure['description']}\n\n"
-            f"👾 Возможные враги: <i>{', '.join(adventure['mobs'])}</i>\n"
-            f"🎖 Опыт: <b>{exp_range}</b>\n"
-            f"💰 Монеты: <b>{money_range}</b>",
-            reply_markup=keyboard
-        )
-        await callback.answer()
-
-    elif data.startswith("start_adv_"):
-        # Начать приключение
-        location_name = data[len("start_adv_"):]
-        location = LOCATIONS.get(location_name)
-
-        if not location:
-            await callback.answer("❗ Локация не найдена.")
-            return
-
-        # Проверка активного приключения
-        existing_status = supabase.table("adventure_status").select("*").eq("user_id", user_id).execute()
-        now = datetime.utcnow()
-        if existing_status.data:
-            end_time_str = existing_status.data[0]["end_time"]
-            end_time = datetime.fromisoformat(end_time_str)
-            if end_time > now:
-                remaining = (end_time - now).seconds
-                await callback.answer(f"⏳ Ты уже в приключении! Осталось {remaining} сек.", show_alert=True)
+    try:
+        if data.startswith("clan_"):
+            await callback.answer()
+            clan_key = data[5:]
+            clan_name = next((name for name in CLANS if name.startswith(clan_key)), None)
+            if not clan_name:
+                await callback.answer("Помилка: клан не знайдено.", show_alert=True)
                 return
-            else:
-                supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
+            desc = CLANS[clan_name]
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="Вибрати", callback_data=f"select_{clan_key}"),
+                    InlineKeyboardButton(text="Назад", callback_data="back_to_clans")
+                ]
+            ])
+            await callback.message.edit_text(desc, reply_markup=keyboard)
 
-        duration = location["duration"]
-        end_time = now + timedelta(seconds=duration)
-        adventure = ADVENTURES.get(location_name)
-        mob = random.choice(adventure["mobs"])
-        exp = random.randint(*location["exp"])
-        money = random.randint(*location["money"])
+        elif data.startswith("select_"):
+            await callback.answer()
+            clan_key = data[7:]
+            clan_name = next((name for name in CLANS if name.startswith(clan_key)), None)
+            if not clan_name:
+                await callback.answer("Помилка: клан не знайдено.", show_alert=True)
+                return
 
-        try:
-            await callback.message.delete()
-        except:
-            pass
+            supabase.table("users").update({"clan": clan_name}).eq("user_id", user_id).execute()
+            supabase.table("clan_members").upsert({"clan_name": clan_name, "user_id": user_id}).execute()
 
-        # Сохраняем статус приключения
-        supabase.table("adventure_status").upsert({
-            "user_id": user_id,
-            "location": location_name,
-            "end_time": end_time.isoformat()
-        }).execute()
+            await callback.message.edit_text(f"Ви успішно вибрали клан:\n\n{CLANS[clan_name]}")
+            await bot.send_message(user_id, "Тепер тобі доступне головне меню ⬇️", reply_markup=main_menu_kb)
 
-        await bot.send_message(
-            user_id,
-            f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n"
-            f"👾 Встретил: <b>{mob}</b>\n"
-            f"⏳ Длительность: <b>{duration} сек.</b>"
-        )
+        elif data == "back_to_clans":
+            await callback.answer()
+            await ask_clan_choice(callback.message)
 
-        await asyncio.sleep(duration)
+        elif data.startswith("adventure_"):
+            await callback.answer()
+            location_name = data[len("adventure_"):]
+            adventure = ADVENTURES.get(location_name)
+            if not adventure:
+                await callback.answer("❗ Пригоди не знайдено.", show_alert=True)
+                return
 
-        user_data = supabase.table("users").select("money").eq("user_id", user_id).execute()
-        current_money = user_data.data[0]["money"] if user_data.data else 0
-        await add_experience(user_id, exp)
-        supabase.table("users").update({
-            "money": current_money + money
-        }).eq("user_id", user_id).execute()
+            mob_preview = random.choice(adventure["mobs"])
+            location_info = LOCATIONS[location_name]
+            exp_range = f"{location_info['exp'][0]}–{location_info['exp'][1]}"
+            money_range = f"{location_info['money'][0]}–{location_info['money'][1]}"
 
-        supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 Почати пригоду", callback_data=f"start_adv_{location_name}")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_adventures")]
+            ])
 
-        await bot.send_message(
-            user_id,
-            f"✅ <b>Приключение завершено!</b>\n\n"
-            f"🏞️ Локация: <b>{location_name}</b>\n"
-            f"⚔️ Побежден враг: <b>{mob}</b>\n\n"
-            f"🎖 Опыт: <b>{exp}</b>\n"
-            f"💰 Монеты: <b>{money}</b>",
-            reply_markup=main_menu_kb
-        )
+            await callback.message.edit_text(
+                f"📍 <b>{location_name}</b>\n"
+                f"{adventure['description']}\n\n"
+                f"👾 Можливі вороги: <i>{', '.join(adventure['mobs'])}</i>\n"
+                f"🎖 Досвід: <b>{exp_range}</b>\n"
+                f"💰 Монети: <b>{money_range}</b>\n",
+                reply_markup=keyboard
+            )
 
-        await callback.answer()
+        elif data.startswith("preview_"):
+            await callback.answer()
+            location_name = data[len("preview_"):]
+            adventure = ADVENTURES.get(location_name)
+            location = LOCATIONS.get(location_name)
 
-    elif data == "back_to_adventures":
-        buttons = [
-            [InlineKeyboardButton(text=f"{name} {emoji}", callback_data=f"adventure_{name}")]
-            for name, emoji in zip(ADVENTURES.keys(), ["🌲", "🏚️", "🏰"])
-        ]
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-        await callback.message.edit_text("🌍 <b>Выбери локацию:</b>", reply_markup=keyboard)
-        await callback.answer()
+            if not adventure or not location:
+                await callback.answer("❗ Локація не знайдена.", show_alert=True)
+                return
 
-    else:
-        await callback.answer("Неизвестное действие.", show_alert=True)
+            exp_range = f"{location['exp'][0]}–{location['exp'][1]}"
+            money_range = f"{location['money'][0]}–{location['money'][1]}"
 
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 Почати пригоду", callback_data=f"start_adv_{location_name}")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_adventures")]
+            ])
 
+            await callback.message.edit_text(
+                f"📍 <b>{location_name}</b>\n"
+                f"{adventure['description']}\n\n"
+                f"👾 Можливі вороги: <i>{', '.join(adventure['mobs'])}</i>\n"
+                f"🎖 Досвід: <b>{exp_range}</b>\n"
+                f"💰 Монети: <b>{money_range}</b>",
+                reply_markup=keyboard
+            )
+
+        elif data.startswith("start_adv_"):
+            await callback.answer()
+            location_name = data[len("start_adv_"):]
+            location = LOCATIONS.get(location_name)
+            if not location:
+                await callback.answer("❗ Локація не знайдена.", show_alert=True)
+                return
+            now = datetime.utcnow()
+            existing_status = supabase.table("adventure_status").select("*").eq("user_id", user_id).execute()
+            if existing_status.data:
+                end_time_str = existing_status.data[0]["end_time"]
+                end_time = datetime.fromisoformat(end_time_str)
+                if end_time > now:
+                    remaining = (end_time - now).seconds
+                    await callback.answer(f"⏳ Ти вже в пригоді! Залишилось {remaining} сек.", show_alert=True)
+                    return
+                else:
+                    supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
+
+            duration = location["duration"]
+            end_time = now + timedelta(seconds=duration)
+            adventure = ADVENTURES.get(location_name)
+            mob = random.choice(adventure["mobs"])
+            exp = random.randint(*location["exp"])
+            money = random.randint(*location["money"])
+
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+
+            supabase.table("adventure_status").upsert({
+                "user_id": user_id,
+                "location": location_name,
+                "end_time": end_time.isoformat()
+            }).execute()
+
+            await bot.send_message(
+                user_id,
+                f"🏃‍♂️ Ти відправився у <b>{location_name}</b>\n"
+                f"👾 Зустрів: <b>{mob}</b>\n"
+                f"⏳ Тривалість: <b>{duration} сек.</b>"
+            )
+
+            await asyncio.sleep(duration)
+
+            user_data = supabase.table("users").select("money").eq("user_id", user_id).execute()
+            current_money = user_data.data[0]["money"] if user_data.data else 0
+            await add_experience(user_id, exp)
+            supabase.table("users").update({
+                "money": current_money + money
+            }).eq("user_id", user_id).execute()
+            supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
+
+            await bot.send_message(
+                user_id,
+                f"✅ <b>Пригода завершена!</b>\n\n"
+                f"🏞️ Локація: <b>{location_name}</b>\n"
+                f"⚔️ Переможений ворог: <b>{mob}</b>\n\n"
+                f"🎖 Досвід: <b>{exp}</b>\n"
+                f"💰 Монети: <b>{money}</b>",
+                reply_markup=main_menu_kb
+            )
+
+        elif data == "back_to_adventures":
+            await callback.answer()
+            buttons = [
+                [InlineKeyboardButton(text=f"{name} {emoji}", callback_data=f"adventure_{name}")]
+                for name, emoji in zip(ADVENTURES.keys(), ["🌲", "🏚️", "🏰"])
+            ]
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.edit_text("🌍 <b>Обери локацію:</b>", reply_markup=keyboard)
+
+        else:
+            await callback.answer("Невідома дія.", show_alert=True)
+    except Exception as e:
+        await callback.answer("Сталася помилка, спробуйте пізніше.", show_alert=True)
+        print(f"Callback error: {e}")
 
 # ---------- Run bot ----------
 async def main():
