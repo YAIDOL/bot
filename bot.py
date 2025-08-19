@@ -100,6 +100,79 @@ CLANS = {
     "Безмолвные песни 🎵": "🎵 <b>Безмолвные песни</b> — это загадочное и меланхоличное сообщество, чье существование окутано завесой печали и древних тайн. Они не владеют острыми клинками или громогласными криками, их оружие — это эмоции, воспоминания и эхо забытых мелодий. Члены этого клана — хранители скорби, носители утерянных историй и проводники через лабиринты человеческих чувств."
 }
 
+SETS = {
+    "strong": {
+        "Бастион Титана": {
+            "description": "🛡️ Массивный сет, дающий большое количество здоровья и щит для защиты",
+            "items": [
+                {"name": "Шлем Стража", "hp": 150, "damage": 0},
+                {"name": "Плащ Жизни", "hp": 250, "damage": 0},
+                {"name": "Перчатки Защиты", "hp": 70, "damage": 0},
+                {"name": "Пояс Скалы", "hp": 130, "damage": 0},
+                {"name": "Наручи Титана", "hp": 50, "damage": 0},
+                {"name": "Щит Вечной Стали", "hp": 150, "damage": 50}
+            ]
+        },
+        "Клинок Бури": {
+            "description": "⚔️ Легкий и стремительный сет с фокусом на урон",
+            "items": [
+                {"name": "Серьги Хищника", "hp": 30, "damage": 0},
+                {"name": "Амулет Хищника", "hp": 60, "damage": 0},
+                {"name": "Перчатки Гнева", "hp": 20, "damage": 0},
+                {"name": "Пояс Хищника", "hp": 30, "damage": 0},
+                {"name": "Сапоги Бури", "hp": 20, "damage": 0},
+                {"name": "Меч Бури", "hp": 0, "damage": 200}
+            ]
+        },
+        "Возмездие": {
+            "description": "🗡️ Сбалансированный сет с упором на среднее здоровье и урон",
+            "items": [
+                {"name": "Шлем Судьбы", "hp": 60, "damage": 0},
+                {"name": "Амулет Правосудия", "hp": 120, "damage": 0},
+                {"name": "Перчатки Карающего", "hp": 40, "damage": 0},
+                {"name": "Пояс Ответа", "hp": 60, "damage": 0},
+                {"name": "Сапоги Ярости", "hp": 40, "damage": 0},
+                {"name": "Клинок Возмездия", "hp": 0, "damage": 100}
+            ]
+        }
+    },
+    "weak": {
+        "Забытый Страж": {
+            "description": "🛡️ Надёжный сет с умеренным здоровьем и слабым уроном",
+            "items": [
+                {"name": "Шлем Былого", "hp": 25, "damage": 0},
+                {"name": "Доспех Чести", "hp": 75, "damage": 0},
+                {"name": "Наручи Былого", "hp": 25, "damage": 0},
+                {"name": "Пояс Нерушимости", "hp": 50, "damage": 0},
+                {"name": "Поножи Былого", "hp": 25, "damage": 0},
+                {"name": "Ржавая Секира", "hp": 0, "damage": 25}
+            ]
+        },
+        "Звёздный Живописец": {
+            "description": "✨ Легкий сет с минимальным здоровьем, но сильным оружием",
+            "items": [
+                {"name": "Капюшон Света", "hp": 5, "damage": 0},
+                {"name": "Куртка Света", "hp": 15, "damage": 0},
+                {"name": "Перчатки Красок", "hp": 15, "damage": 0},
+                {"name": "Юбка Света", "hp": 10, "damage": 0},
+                {"name": "Сапоги Света", "hp": 5, "damage": 0},
+                {"name": "Клинок Света", "hp": 0, "damage": 100}
+            ]
+        },
+        "Охотник": {
+            "description": "🏹 Сет для ловкости и средней защиты, с акцентом на оружие",
+            "items": [
+                {"name": "Шляпа Охотника", "hp": 10, "damage": 0},
+                {"name": "Плащ Теней", "hp": 40, "damage": 5},
+                {"name": "Перчатки Охотника", "hp": 15, "damage": 0},
+                {"name": "Штаны Охотника", "hp": 15, "damage": 0},
+                {"name": "Кожаные Сапоги", "hp": 20, "damage": 0},
+                {"name": "Трость-хлыст", "hp": 0, "damage": 45}
+            ]
+        }
+    }
+}
+
 ADVENTURES = {
     "Большой Лес": {
         "description": "🌲 Густой, таинственный лес, окутанный туманом...",
@@ -221,6 +294,24 @@ RARITY_CHANCES = {
     "common": 60
 }
 
+DROP_CHANCES = {
+    "common": {"weak": 0.15, "strong": 0.05},
+    "rare": {"weak": 0.20, "strong": 0.10},
+    "epic": {"weak": 0.30, "strong": 0.15}
+}
+
+
+def random_strong_item():
+    set_name = random.choice(list(SETS["strong"].keys()))
+    chosen_set = SETS["strong"][set_name]
+    item = random.choice(chosen_set["items"])
+    return set_name, item
+
+def random_weak_item():
+    set_name = random.choice(list(SETS["weak"].keys()))
+    chosen_set = SETS["weak"][set_name]
+    item = random.choice(chosen_set["items"])
+    return set_name, item
 
 def get_random_monster(location_mobs: list):
     rarity_pool = {
@@ -650,24 +741,19 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                 f"💰 Монеты: <b>{money_range}</b>",
                 reply_markup=keyboard
             )
-
         elif data.startswith("start_adv_"):
             await callback.answer()
             location_name = data[len("start_adv_"):]
             location = LOCATIONS.get(location_name)
-            location = LOCATIONS.get(location_name)
             if not location:
                 await callback.answer("❗ Локация не найдена.", show_alert=True)
                 return
-
             user_data = supabase.table("users").select("level").eq("user_id", user_id).execute()
             user_level = user_data.data[0]["level"] if user_data.data else 1
             required_level = location.get("min_level", 1)
-
             if user_level < required_level:
                 await callback.answer(f"🔒 Доступно с {required_level} уровня.", show_alert=True)
                 return
-
             now = datetime.utcnow()
             existing_status = supabase.table("adventure_status").select("*").eq("user_id", user_id).execute()
             if existing_status.data:
@@ -679,12 +765,10 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                     return
                 else:
                     supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
-
             duration = location["duration"]
             end_time = now + timedelta(seconds=duration)
             adventure = ADVENTURES.get(location_name)
             monster = get_random_monster(adventure["mobs"])
-
             mob = monster["name"]
             desc = monster["description"]
             hp = monster["hp"]
@@ -692,21 +776,17 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             dodge = monster["dodge"]
             counter = monster["counter"]
             rarity = monster["rarity"].capitalize()
-
             exp = random.randint(*location["exp"])
             money = random.randint(*location["money"])
-
             try:
                 await callback.message.delete()
             except Exception:
                 pass
-
             supabase.table("adventure_status").upsert({
                 "user_id": user_id,
                 "location": location_name,
                 "end_time": end_time.isoformat()
             }).execute()
-
             await bot.send_message(
                 user_id,
                 f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n\n"
@@ -719,17 +799,58 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                 f"🔁 Контратака: <b>{counter}%</b>\n\n"
                 f"⏳ Приключение продлится <b>{duration}</b> сек."
             )
-
             await asyncio.sleep(duration)
-
+            # Завершение приключения — награды
+            # Обновляем деньги и опыт
             user_data = supabase.table("users").select("money").eq("user_id", user_id).execute()
             current_money = user_data.data[0]["money"] if user_data.data else 0
             await add_experience(user_id, exp)
             supabase.table("users").update({
                 "money": current_money + money
             }).eq("user_id", user_id).execute()
+
+            # Удаляем статус приключения
             supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
 
+            # Попытка выпадения предмета
+            rarity_key = monster["rarity"].lower()
+            drop_chances = DROP_CHANCES.get(rarity_key, {"weak": 0.10, "strong": 0.02})
+
+            drop_roll = random.random()
+            item_dropped = None
+
+            if drop_roll < drop_chances["weak"]:
+                set_name, item = random_weak_item()
+                item_dropped = item
+                rarity_type = "слабый"
+            elif drop_roll < drop_chances["weak"] + drop_chances["strong"]:
+                set_name, item = random_strong_item()
+                item_dropped = item
+                rarity_type = "сильный"
+
+            # Сообщаем о предмете и кладём в инвентарь, если есть дроп
+            if item_dropped:
+                item_name = item_dropped["name"]
+                await bot.send_message(
+                    user_id,
+                    f"🎉 Тебе выпал {rarity_type} предмет из сета <b>{set_name}</b>:\n"
+                    f"🧩 <b>{item_name}</b>"
+                )
+                existing = supabase.table("backpack").select("count").eq("user_id", user_id).eq("item_name",
+                                                                                                item_name).execute()
+                if existing.data:
+                    current_count = existing.data[0]["count"]
+                    supabase.table("backpack").update({
+                        "count": current_count + 1
+                    }).eq("user_id", user_id).eq("item_name", item_name).execute()
+                else:
+                    supabase.table("backpack").insert({
+                        "user_id": user_id,
+                        "item_name": item_name,
+                        "count": 1
+                    }).execute()
+
+            # Финальное сообщение о завершении приключения
             await bot.send_message(
                 user_id,
                 f"✅ <b>Приключение завершено!</b>\n\n"
@@ -739,6 +860,7 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                 f"💰 Получено монет: <b>{money}</b>",
                 reply_markup=main_menu_kb
             )
+
 
         elif data == "back_to_adventures":
             await callback.answer()
