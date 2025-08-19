@@ -58,13 +58,14 @@ async def notify_users_on_start():
 
 # ----------EXP ----------
 async def add_experience(user_id: int, amount: int):
-    response = supabase.table("users").select("exp, level").eq("user_id", user_id).execute()
+    response = supabase.table("users").select("exp, level, level_points").eq("user_id", user_id).execute()
     if not response.data:
         return
 
     user = response.data[0]
     current_exp = user.get("exp", 0)
     level = user.get("level", 1)
+    level_points = user.get("level_points", 0)
 
     new_exp = current_exp + amount
     exp_max = level * 100
@@ -76,19 +77,20 @@ async def add_experience(user_id: int, amount: int):
         level_ups += 1
         exp_max = level * 100
 
+    # Оновлення рівня, досвіду та очок прокачки
     supabase.table("users").update({
         "exp": new_exp,
         "level": level,
-        "exp_max": exp_max
+        "exp_max": exp_max,
+        "level_points": level_points + level_ups
     }).eq("user_id", user_id).execute()
 
-    # Отправляем оповещение о левел-апе
     if level_ups > 0:
         await bot.send_message(
             user_id,
-            f"🌟 <b>Поздравляем!</b> Вы достигли <b>{level} уровня</b>!"
+            f"🌟 <b>Поздравляем!</b> Вы достигли <b>{level} уровня</b>!\n"
+            f"🎉 Вы получили <b>{level_ups}</b> очко прокачки!"
         )
-
 
 # ---------- Clans ----------
 CLANS = {
@@ -385,6 +387,28 @@ async def handle_messages(message: types.Message):
         await ask_clan_choice(message)
         return
 
+    profile_kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🎒 Рюкзак"), KeyboardButton(text="⚙️ Прокачка")],
+            [KeyboardButton(text="⬅️ Главная")]
+        ],
+        resize_keyboard=True
+    )
+
+    def get_upgrade_keyboard(points: int):
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="❤️ Здоровье", callback_data="upgrade_health"),
+                InlineKeyboardButton(text="🗡️ Урон", callback_data="upgrade_attack"),
+            ],
+            [
+                InlineKeyboardButton(text="⬅️ Назад", callback_data="upgrade_back")
+            ],
+            [
+                InlineKeyboardButton(text=f"Очки прокачки: {points}", callback_data="points_info")
+            ]
+        ])
+
     if text == "👤 Профиль":
         response = supabase.table("users").select("*").eq("user_id", user_id).execute()
         row = response.data[0] if response.data else None
@@ -395,18 +419,69 @@ async def handle_messages(message: types.Message):
                 f"Статус аккаунта: {row['status']}\n\n"
                 f"🌟 Уровень: {row['level']}\n"
                 f"Опыт: {row['exp']} / {row['exp_max']}\n"
-                f"❤️{row['health']} | 🛡{row['defense']} | 🗡{row['attack']}\n\n"
+                f"Очки прокачки: {row.get('level_points', 0)}\n"
+                f"❤️{row['health']} | 🗡{row['attack']}\n\n"
                 f"💰 Деньги: {row['money']} | 💎 Алмазы: {row['diamonds']}\n\n"
                 f"🥋 Экипировка:\n"
-                f"Голова: {row['head']}\nТело: {row['body']}\nНоги: {row['legs']}\nСтупни: {row['feet']}\n"
+                f"Голова: {row['head']}\n"
+                f"Тело: {row['body']}\n"
+                f"Перчатки: {row.get('gloves', 'нет')}\n"
+                f"Ноги: {row['legs']}\n"
+                f"Ступни: {row['feet']}\n"
                 f"Оружие: {row['weapon']}\n"
-                f"Сумка: {row['bag']}\n\n"
                 f"💪 Клан: {row.get('clan', 'нет')}"
             )
-            await message.answer(profile_text, reply_markup=main_menu_kb)
+            await message.answer(profile_text, reply_markup=profile_kb)
         else:
             waiting_for_nick.add(user_id)
             await message.answer("Никнейм не найден. Введите свой никнейм.")
+
+    elif text == "🎒 Рюкзак":
+        await message.answer("⚙️ В разработке...", reply_markup=profile_kb)
+
+
+
+    elif text == "⚙️ Прокачка":
+        upgrade_kb = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="❤️ Здоровье"), KeyboardButton(text="🗡️ Урон")],
+                [KeyboardButton(text="⬅️ Назад")]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer("Выберите, что прокачать:", reply_markup=upgrade_kb)
+    elif text in ("❤️ Здоровье", "🗡️ Урон"):
+        resp = supabase.table("users").select("level_points", "health", "attack").eq("user_id", user_id).execute()
+        if not resp.data:
+            return
+        user = resp.data[0]
+        points = user["level_points"]
+        if points <= 0:
+            await message.answer("❗ У вас нет очков прокачки.", reply_markup=profile_kb)
+            return
+        new_points = points - 1
+        updates = {"level_points": new_points}
+        if text == "❤️ Здоровье":
+            updates["health"] = user["health"] + 10
+            await message.answer("❤️ <b>Здоровье +10!</b>\nВы стали крепче и выносливее.")
+        else:  # "🗡️ Урон"
+            updates["attack"] = user["attack"] + 10
+            await message.answer("🗡️ <b>Атака +10!</b>\nТвоя сила увеличилась!")
+        supabase.table("users").update(updates).eq("user_id", user_id).execute()
+        updated = supabase.table("users").select("level_points", "health", "attack").eq("user_id", user_id).execute()
+        new_user = updated.data[0]
+        await message.answer(
+            f"🧬 <b>Текущие характеристики:</b>\n"
+            f"❤️ Здоровье: <b>{new_user['health']}</b>\n"
+            f"🗡️ Урон: <b>{new_user['attack']}</b>\n"
+            f"🎯 Очки прокачки: <b>{new_user['level_points']}</b>"
+        )
+    elif text == "⬅️ Назад":
+        await message.answer("Главное меню:", reply_markup=profile_kb)
+
+    elif text == "⬅️ Главная":
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+
     elif text == "🗺️ Приключения":
         locations_info = ""
         for name, data in LOCATIONS.items():
@@ -429,8 +504,6 @@ async def handle_messages(message: types.Message):
         ]
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         await message.answer(f"🌍 <b>Приключения:</b>\n\n{locations_info}", reply_markup=keyboard)
-
-
 
     elif text == "💪 Мой клан":
         response = supabase.table("users").select("clan").eq("user_id", user_id).execute()
