@@ -193,19 +193,34 @@ LOCATIONS = {
         "exp": (5, 10),
         "money": (10, 20),
         "duration": 15,
-        "min_level": 1
+        "min_level": 1,
+        "rarity_chances": {
+            "epic": 5,
+            "rare": 20,
+            "common": 75
+        }
     },
     "Мёртвая Деревня": {
         "exp": (15, 30),
         "money": (20, 40),
         "duration": 30,
-        "min_level": 10
+        "min_level": 10,
+        "rarity_chances": {
+            "epic": 10,
+            "rare": 25,
+            "common": 65
+        }
     },
     "Заброшенный Замок": {
         "exp": (40, 60),
         "money": (50, 100),
         "duration": 60,
-        "min_level": 20
+        "min_level": 20,
+        "rarity_chances": {
+            "epic": 15,
+            "rare": 30,
+            "common": 55
+        }
     }
 }
 
@@ -288,11 +303,6 @@ MONSTERS = {
     }
 }
 
-RARITY_CHANCES = {
-    "epic": 10,
-    "rare": 30,
-    "common": 60
-}
 
 DROP_CHANCES = {
     "common": {"weak": 0.15, "strong": 0.05},
@@ -313,25 +323,13 @@ def random_weak_item():
     item = random.choice(chosen_set["items"])
     return set_name, item
 
-def get_random_monster(location_mobs: list):
-    rarity_pool = {
-        "epic": [],
-        "rare": [],
-        "common": []
-    }
+def get_random_monster(location_name: str, location_mobs: list):
+    rarity_chances = LOCATIONS.get(location_name, {}).get("rarity_chances", {
+        "epic": 10,
+        "rare": 30,
+        "common": 60
+    })
 
-    for name in location_mobs:
-        monster = MONSTERS.get(name)
-        if not monster:
-            continue
-        rarity = monster.get("rarity", "common")
-        rarity
-
-
-import random
-
-
-def get_random_monster(location_mobs: list):
     rarity_pool = {
         "epic": [],
         "rare": [],
@@ -348,15 +346,12 @@ def get_random_monster(location_mobs: list):
         rarity_pool[rarity].append(monster)
 
     rarity = random.choices(
-        population=list(RARITY_CHANCES.keys()),
-        weights=list(RARITY_CHANCES.values()),
+        population=list(rarity_chances.keys()),
+        weights=list(rarity_chances.values()),
         k=1
     )[0]
 
-    pool = rarity_pool.get(rarity)
-    if not pool:
-        pool = rarity_pool["common"]
-
+    pool = rarity_pool.get(rarity, rarity_pool["common"])
     return random.choice(pool)
 
 # ---------- Clan selection ----------
@@ -459,6 +454,7 @@ async def handle_messages(message: types.Message):
     user_id = message.from_user.id
     text = message.text.strip()
 
+    # Проверка на ожидание ввода никнейма
     if user_id in waiting_for_nick:
         nickname = text
 
@@ -478,6 +474,7 @@ async def handle_messages(message: types.Message):
         await ask_clan_choice(message)
         return
 
+    # Основное меню профиля
     profile_kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🎒 Рюкзак"), KeyboardButton(text="⚙️ Прокачка")],
@@ -486,20 +483,25 @@ async def handle_messages(message: types.Message):
         resize_keyboard=True
     )
 
-    def get_upgrade_keyboard(points: int):
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="❤️ Здоровье", callback_data="upgrade_health"),
-                InlineKeyboardButton(text="🗡️ Урон", callback_data="upgrade_attack"),
-            ],
-            [
-                InlineKeyboardButton(text="⬅️ Назад", callback_data="upgrade_back")
-            ],
-            [
-                InlineKeyboardButton(text=f"Очки прокачки: {points}", callback_data="points_info")
-            ]
-        ])
+    # Функция для отображения содержимого рюкзака
+    async def show_backpack(message: types.Message):
+        user_id = message.from_user.id  # Получаем ID пользователя
 
+        # Получаем данные о рюкзаке из таблицы backpack в Supabase
+        backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
+
+        if backpack_data.data:
+            items_message = "Ваши вещи в рюкзаке:\n\n"
+            for item in backpack_data.data:
+                items_message += f"{item['item_name']}: {item['count']} шт.\n"
+
+            # Отправляем сообщение с перечнем вещей
+            await message.answer(items_message, reply_markup=profile_kb)
+        else:
+            # Если рюкзак пуст
+            await message.answer("У вас нет вещей в рюкзаке.", reply_markup=profile_kb)
+
+    # Основной блок обработки сообщений
     if text == "👤 Профиль":
         response = supabase.table("users").select("*").eq("user_id", user_id).execute()
         row = response.data[0] if response.data else None
@@ -528,9 +530,8 @@ async def handle_messages(message: types.Message):
             await message.answer("Никнейм не найден. Введите свой никнейм.")
 
     elif text == "🎒 Рюкзак":
-        await message.answer("⚙️ В разработке...", reply_markup=profile_kb)
-
-
+        # Вставляем вызов функции для отображения рюкзака
+        await show_backpack(message)
 
     elif text == "⚙️ Прокачка":
         upgrade_kb = ReplyKeyboardMarkup(
@@ -541,6 +542,7 @@ async def handle_messages(message: types.Message):
             resize_keyboard=True
         )
         await message.answer("Выберите, что прокачать:", reply_markup=upgrade_kb)
+
     elif text in ("❤️ Здоровье", "🗡️ Урон"):
         resp = supabase.table("users").select("level_points", "health", "attack").eq("user_id", user_id).execute()
         if not resp.data:
@@ -567,6 +569,7 @@ async def handle_messages(message: types.Message):
             f"🗡️ Урон: <b>{new_user['attack']}</b>\n"
             f"🎯 Очки прокачки: <b>{new_user['level_points']}</b>"
         )
+
     elif text == "⬅️ Назад":
         await message.answer("Главное меню:", reply_markup=profile_kb)
 
@@ -608,7 +611,8 @@ async def handle_messages(message: types.Message):
             users_resp = supabase.table("users").select("user_id, username").in_("user_id", user_ids).execute()
             id_to_username = {u["user_id"]: u["username"] for u in users_resp.data or []}
             members_list = "\n".join(f"- {id_to_username.get(uid, uid)}" for uid in user_ids) or "Пока нет участников"
-            await message.answer(f"💪 Клан: <b>{clan}</b>\n\n{clan_desc}\n\n👥 Участники:\n{members_list}", reply_markup=main_menu_kb)
+            await message.answer(f"💪 Клан: <b>{clan}</b>\n\n{clan_desc}\n\n👥 Участники:\n{members_list}",
+                                 reply_markup=main_menu_kb)
         else:
             await message.answer("Вы еще не выбрали клан. Пожалуйста, выберите клан.", reply_markup=main_menu_kb)
             await ask_clan_choice(message)
@@ -622,7 +626,8 @@ async def handle_messages(message: types.Message):
         top_10 = players[:10]
         players_list = "\n".join(f"{i + 1}. {p['username']} 🌟 {p['level']}" for i, p in enumerate(top_10))
         place = next((i + 1 for i, p in enumerate(players) if p["user_id"] == user_id), None)
-        await message.answer(f"🌟 <b>Топ по уровню:</b>\n\n{players_list}\n\n📍Твое место: {place}", reply_markup=top_menu_kb)
+        await message.answer(f"🌟 <b>Топ по уровню:</b>\n\n{players_list}\n\n📍Твое место: {place}",
+                             reply_markup=top_menu_kb)
 
     elif text == "💰 Топ по деньгам":
         response = supabase.table("users").select("user_id, username, money").order("money", desc=True).execute()
@@ -630,7 +635,8 @@ async def handle_messages(message: types.Message):
         top_10 = players[:10]
         players_list = "\n".join(f"{i + 1}. {p['username']} 💰 {p['money']}" for i, p in enumerate(top_10))
         place = next((i + 1 for i, p in enumerate(players) if p["user_id"] == user_id), None)
-        await message.answer(f"💰 <b>Топ по деньгам:</b>\n\n{players_list}\n\n📍Твое место: {place}", reply_markup=top_menu_kb)
+        await message.answer(f"💰 <b>Топ по деньгам:</b>\n\n{players_list}\n\n📍Твое место: {place}",
+                             reply_markup=top_menu_kb)
 
     elif text == "⬅️ Главная":
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
@@ -645,7 +651,9 @@ async def handle_messages(message: types.Message):
         await message.answer("⚙️ В разработке...", reply_markup=main_menu_kb)
 
     else:
-        await message.answer("❓ Неизвестная команда. Используй кнопки меню или напиши /start.", reply_markup=main_menu_kb)
+        await message.answer("❓ Неизвестная команда. Используй кнопки меню или напиши /start.",
+                             reply_markup=main_menu_kb)
+
 
 # ---------- Callback: Clan selection ----------
 @dp.callback_query()
@@ -768,7 +776,7 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             duration = location["duration"]
             end_time = now + timedelta(seconds=duration)
             adventure = ADVENTURES.get(location_name)
-            monster = get_random_monster(adventure["mobs"])
+            monster = get_random_monster(location_name, adventure["mobs"])
             mob = monster["name"]
             desc = monster["description"]
             hp = monster["hp"]
