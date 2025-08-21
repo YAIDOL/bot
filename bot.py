@@ -483,16 +483,7 @@ async def handle_messages(message: types.Message):
         resize_keyboard=True
     )
 
-    # Клавиатура для рюкзака (Надеть, Снять, Назад)
-    backpack_kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="👒 Надеть"), KeyboardButton(text="❌ Снять")],
-            [KeyboardButton(text="⬅️ Назад")]
-        ],
-        resize_keyboard=True
-    )
-
-    # Клавіатура для рюкзака (Надеть, Снять, Назад)
+    # Створимо клавіатуру для предметів
     backpack_action_kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="⚔️ Надеть"), KeyboardButton(text="❌ Снять")],
@@ -501,7 +492,7 @@ async def handle_messages(message: types.Message):
         resize_keyboard=True
     )
 
-    # Функція для відображення рюкзака з новою клавіатурою
+    # Функція для відображення рюкзака
     async def show_backpack(message: types.Message):
         user_id = message.from_user.id  # Отримуємо ID користувача
 
@@ -509,66 +500,76 @@ async def handle_messages(message: types.Message):
         backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
 
         if backpack_data.data:
-            items_message = "Ваші речі в рюкзаку:\n\n"
+            items_message = "Ваши вещи в рюкзаке:\n\n"
 
             for item in backpack_data.data:
                 item_name = item['item_name']
                 item_count = item['count']
-                item_details = None
-                item_strength = "⚡"  # За замовчуванням предмет слабкий
+                items_message += f"{item_name} (Количество: {item_count} шт.)\n\n"
 
-                # Пошук відповідних характеристик в SETS
-                for set_type, set_data in SETS.items():
-                    for set_name, set_items in set_data.items():
-                        for set_item in set_items['items']:
-                            if set_item['name'] == item_name:
-                                item_details = set_item
-                                # Визначаємо силу предмета залежно від сету
-                                if set_type == "strong":
-                                    item_strength = "💪"  # Сильний предмет
-                                elif set_type == "weak":
-                                    item_strength = "⚡"  # Слабкий предмет
+            # Відправляємо список предметів і клавіатуру
+            await message.answer(items_message, reply_markup=backpack_action_kb)
+        else:
+            await message.answer("У вас нет вещей в рюкзаке.", reply_markup=backpack_action_kb)
+
+        # Дожидаемся ввода названия предмета
+
+
+    async def process_item_name(msg: types.Message):
+        item_name = msg.text.strip()  # Убираем лишние пробелы
+        user_id = msg.from_user.id
+
+        # Получаем данные из рюкзака пользователя
+        backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
+
+        item_found = False
+        for item in backpack_data.data:
+            if item['item_name'] == item_name:
+                item_found = True
+                item_count = item['count']
+                if item_count > 0:
+                    # Перебираем все сеты, чтобы найти нужную часть тела
+                    item_details = None
+                    part_of_body = None  # Для слота
+                    for set_type, set_data in SETS.items():
+                        for set_name, set_items in set_data.items():
+                            for set_item in set_items['items']:
+                                if set_item['name'] == item_name:
+                                    item_details = set_item
+                                    part_of_body = next(iter(set_item.keys()))  # Получаем название части тела
+                                    break
+                            if item_details:
                                 break
                         if item_details:
                             break
-                    if item_details:
-                        break
 
-                # Якщо знайдені характеристики, додаємо їх в повідомлення
-                if item_details:
-                    hp = item_details['hp']
-                    damage = item_details['damage']
-                    # Додаємо опис з емодзі та силою предмета
-                    items_message += f"{item_name} {item_strength}\n"
-                    items_message += f"❤️ {hp} | 🗡 {damage}\n"
-                    items_message += f"Кількість: {item_count} шт.\n\n"
+                    if item_details and part_of_body:
+                        # Если нашли нужный слот, обновляем данные пользователя
+                        update_data = {part_of_body: item_name}
+                        supabase.table("users").update(update_data).eq("user_id", user_id).execute()
+
+                        # Уменьшаем количество предмета в рюкзаке
+                        new_count = item_count - 1
+                        supabase.table("backpack").update({"count": new_count}).eq("user_id", user_id).eq(
+                            "item_name", item_name).execute()
+
+                        await msg.answer(f"Вы одели {item_name} на {part_of_body}!", reply_markup=backpack_action_kb)
+                        return
+                    else:
+                        await msg.answer("Не удалось найти подходящий слот для этого предмета.",
+                                         reply_markup=backpack_action_kb)
+                        return
                 else:
-                    # Якщо не знайдено, просто відображаємо назву та кількість
-                    items_message += f"{item_name} (Характеристики не знайдено)\n"
-                    items_message += f"Кількість: {item_count} шт.\n\n"
+                    await msg.answer(f"У вас нет предмета: {item_name} в рюкзаке.", reply_markup=backpack_action_kb)
+                    return
 
-            # Відправляємо повідомлення з переліком речей і клавіатурою для дій з рюкзаком
-            await message.answer(items_message, reply_markup=backpack_action_kb)
-        else:
-            # Якщо рюкзак порожній
-            await message.answer("У вас немає речей в рюкзаку.", reply_markup=backpack_action_kb)
+        if not item_found:
+            await msg.answer("Предмет не найден в рюкзаке.", reply_markup=backpack_action_kb)
 
-    # Основний блок обробки повідомлень
-    async def handle_message(message: types.Message):
-        text = message.text  # Текст повідомлення
-        user_id = message.from_user.id  # ID користувача
-
-        if text == "🎒 Рюкзак":
-            await show_backpack(message)
-
-        elif text == "⚔️ Надеть":
-            await message.answer("Виберіть предмет для надягання.", reply_markup=backpack_action_kb)
-
-        elif text == "❌ Снять":
-            await message.answer("Виберіть предмет для зняття.", reply_markup=backpack_action_kb)
-
-        elif text == "⬅️ Назад":
-            await message.answer("Головне меню:", reply_markup=profile_kb)
+    # Обробка натискання кнопки "Надеть"
+    async def handle_equip(message: types.Message):
+        await message.answer("Введите название предмета, который вы хотите надеть:",
+                             reply_markup=types.ReplyKeyboardRemove())
 
     # Основной блок обработки сообщений
     if text == "👤 Профиль":
@@ -598,15 +599,17 @@ async def handle_messages(message: types.Message):
             waiting_for_nick.add(user_id)
             await message.answer("Никнейм не найден. Введите свой никнейм.")
 
-
     elif text == "🎒 Рюкзак":
         await show_backpack(message)
-    elif text == "👒 Надеть":
-        await message.answer("Вы выбрали надеть предмет. Выберите предмет для надевания.", reply_markup=backpack_kb)
+
+    elif text == "⚔️ Надеть":
+        await handle_equip(message)
+
     elif text == "❌ Снять":
-        await message.answer("Вы выбрали снять предмет. Выберите предмет для снятия.", reply_markup=backpack_kb)
+        await message.answer("Виберіть предмет для зняття.", reply_markup=backpack_action_kb)
+
     elif text == "⬅️ Назад":
-        await message.answer("Возвращаемся в рюкзак", reply_markup=profile_kb)
+        await message.answer("Головне меню:", reply_markup=profile_kb)
 
     elif text == "⚙️ Прокачка":
         upgrade_kb = ReplyKeyboardMarkup(
@@ -650,6 +653,7 @@ async def handle_messages(message: types.Message):
 
     elif text == "⬅️ Главная":
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
+
 
     elif text == "🗺️ Приключения":
         locations_info = ""
@@ -724,11 +728,6 @@ async def handle_messages(message: types.Message):
 
     elif text == "🛍️ Торговля":
         await message.answer("⚙️ В разработке...", reply_markup=main_menu_kb)
-
-    else:
-        await message.answer("❓ Неизвестная команда. Используй кнопки меню или напиши /start.",
-                             reply_markup=main_menu_kb)
-
 
 # ---------- Callback: Clan selection ----------
 @dp.callback_query()
