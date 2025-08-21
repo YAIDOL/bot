@@ -11,7 +11,6 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 
-
 # ---------- Load environment ----------
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -51,6 +50,36 @@ forge_menu_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+# Основная клавиатура профиля
+profile_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🎒 Рюкзак"), KeyboardButton(text="⚙️ Прокачка")],
+        [KeyboardButton(text="⬅️ Главная")]
+    ],
+    resize_keyboard=True
+)
+
+# Створимо клавіатуру для предметів
+backpack_action_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="⚔️ Надеть"), KeyboardButton(text="❌ Снять")],
+        [KeyboardButton(text="⬅️Назад")]
+    ],
+    resize_keyboard=True
+)
+
+# Создание клавиатуры для выбора экипировки
+equip_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🪖 Голова"), KeyboardButton(text="👕 Тело"), KeyboardButton(text="🧤 Руки")],
+        [KeyboardButton(text="👖 Ноги"), KeyboardButton(text="👟 Ступни"), KeyboardButton(text="🗡️ Оружие")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
 async def notify_users_on_start():
     print("Бот запущен и уведомляет пользователей...")
     # Тут можна зробити розсилку або інші дії
@@ -92,6 +121,45 @@ async def add_experience(user_id: int, amount: int):
             f"🎉 Вы получили <b>{level_ups}</b> очко прокачки!"
         )
 
+
+# Функція для створення інлайн клавіатури, що показує тільки ті предмети, які є в рюкзаку
+async def create_inline_keyboard_from_backpack(user_id, category):
+    # Запитуємо всі предмети з рюкзака користувача
+    backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
+
+    if not backpack_data.data:
+        return None  # Якщо у користувача немає предметів в рюкзаку
+
+    # Фільтруємо предмети по категорії (якщо є)
+    filtered_items = []
+    for item in backpack_data.data:
+        item_name = item['item_name']
+        item_count = item['count']
+
+        # Перевіряємо, чи цей предмет належить до вибраної категорії
+        for category_name, category_data in items.items():  # items - ваша категорія предметів
+            for set_item in category_data:
+                if set_item['name'] == item_name:
+                    if category_name == category:  # Порівнюємо категорії
+                        filtered_items.append((set_item, item_count))
+                    break
+
+    if not filtered_items:
+        return None  # Якщо немає предметів в рюкзаку, що належать до цієї категорії
+
+    # Створюємо інлайн клавіатуру з фільтрованих предметів
+    buttons = [
+        InlineKeyboardButton(text=f"{item['name']} ({item_count})", callback_data=item['callback_data'])
+        for item, item_count in filtered_items
+    ]
+
+    # Формуємо клавіатуру, де кожні дві кнопки будуть в одному ряду
+    keyboard_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
+
+    # Створюємо об'єкт InlineKeyboardMarkup з правильним форматом
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    return keyboard
 # ---------- Clans ----------
 CLANS = {
     "Звездные стражи 🌌": "🛡 <b>Звездные стражи</b> — это древнее и неуловимое братство, чья связь с космосом и тайнами вселенной глубока и неразрывна. Они — вечные наблюдатели, хранители небесного порядка и защитники миров от угроз, исходящих из бездны космоса. Их взгляд устремлен к звездам, а сердца бьются в ритме галактических циклов.",
@@ -99,40 +167,91 @@ CLANS = {
     "Тенистые клинки 🌑": "🌑 <b>Тенистые клинки</b> — это древнее братство, чье существование окутано тайной и легендами. Они не стремятся к славе или открытому признанию, предпочитая действовать из теней, словно невидимые вихри, которые оставляют за собой лишь след судьбы.",
     "Безмолвные песни 🎵": "🎵 <b>Безмолвные песни</b> — это загадочное и меланхоличное сообщество, чье существование окутано завесой печали и древних тайн. Они не владеют острыми клинками или громогласными криками, их оружие — это эмоции, воспоминания и эхо забытых мелодий. Члены этого клана — хранители скорби, носители утерянных историй и проводники через лабиринты человеческих чувств."
 }
+# Словник всіх предметів
+items = {
+    "head": [
+        {"name": "Шлем Стража", "callback_data": "helmet_guard"},
+        {"name": "Серьги Хищника", "callback_data": "ear_predator"},
+        {"name": "Шлем Судьбы", "callback_data": "helmet_fate"},
+        {"name": "Шлем Былого", "callback_data": "helmet_of_old"},
+        {"name": "Капюшон Света", "callback_data": "hood_of_light"},
+        {"name": "Шляпа Охотника", "callback_data": "hunter_hat"}
+    ],
+    "body": [
+        {"name": "Плащ Жизни", "callback_data": "cloak_of_life"},
+        {"name": "Амулет Хищника", "callback_data": "amulet_of_predator"},
+        {"name": "Амулет Правосудия", "callback_data": "amulet_of_justice"},
+        {"name": "Доспех Чести", "callback_data": "armor_of_honor"},
+        {"name": "Куртка Света", "callback_data": "jacket_of_light"},
+        {"name": "Плащ Теней", "callback_data": "cloak_of_shadows"}
+    ],
+    "gloves": [
+        {"name": "Перчатки Защиты", "callback_data": "gloves_of_protection"},
+        {"name": "Перчатки Гнева", "callback_data": "gloves_of_wrath"},
+        {"name": "Перчатки Карающего", "callback_data": "gloves_of_avenger"},
+        {"name": "Наручи Былого", "callback_data": "bracers_of_old"},
+        {"name": "Перчатки Красок", "callback_data": "gloves_of_paint"},
+        {"name": "Перчатки Охотника", "callback_data": "hunter_gloves"}
+    ],
+    "legs": [
+        {"name": "Пояс Скалы", "callback_data": "belt_of_rock"},
+        {"name": "Пояс Хищника", "callback_data": "belt_of_predator"},
+        {"name": "Пояс Ответа", "callback_data": "belt_of_revenge"},
+        {"name": "Пояс Нерушимости", "callback_data": "belt_of_indestructibility"},
+        {"name": "Юбка Света", "callback_data": "skirt_of_light"},
+        {"name": "Штаны Охотника", "callback_data": "hunter_pants"}
+    ],
+    "feet": [
+        {"name": "Наручи Титана", "callback_data": "bracers_of_titan"},
+        {"name": "Сапоги Бури", "callback_data": "boots_of_storm"},
+        {"name": "Сапоги Ярости", "callback_data": "boots_of_rage"},
+        {"name": "Поножи Былого", "callback_data": "greaves_of_old"},
+        {"name": "Сапоги Света", "callback_data": "boots_of_light"},
+        {"name": "Кожаные Сапоги", "callback_data": "leather_boots"}
+    ],
+    "weapon": [
+        {"name": "Щит Вечной Стали", "callback_data": "shield_of_eternal_steel"},
+        {"name": "Меч Бури", "callback_data": "sword_of_storm"},
+        {"name": "Клинок Возмездия", "callback_data": "blade_of_vengeance"},
+        {"name": "Ржавая Секира", "callback_data": "rusty_axe"},
+        {"name": "Клинок Света", "callback_data": "blade_of_light"},
+        {"name": "Трость-хлыст", "callback_data": "whip_staff"}
+    ]
+}
 
 SETS = {
     "strong": {
         "Бастион Титана": {
             "description": "🛡️ Массивный сет, дающий большое количество здоровья и щит для защиты",
             "items": [
-                {"name": "Шлем Стража", "hp": 150, "damage": 0, "head": "Голова"},
-                {"name": "Плащ Жизни", "hp": 250, "damage": 0, "body": "Тело"},
-                {"name": "Перчатки Защиты", "hp": 70, "damage": 0, "gloves": "Перчатки"},
-                {"name": "Пояс Скалы", "hp": 130, "damage": 0, "legs": "Ноги"},
-                {"name": "Наручи Титана", "hp": 50, "damage": 0, "feet": "Ступни"},
-                {"name": "Щит Вечной Стали", "hp": 150, "damage": 50, "weapon": "Оружие"}
+                {"id": 1, "name": "Шлем Стража", "hp": 150, "damage": 0, "head": "Голова"},
+                {"id": 2, "name": "Плащ Жизни", "hp": 250, "damage": 0, "body": "Тело"},
+                {"id": 3, "name": "Перчатки Защиты", "hp": 70, "damage": 0, "gloves": "Перчатки"},
+                {"id": 4, "name": "Пояс Скалы", "hp": 130, "damage": 0, "legs": "Ноги"},
+                {"id": 5, "name": "Наручи Титана", "hp": 50, "damage": 0, "feet": "Ступни"},
+                {"id": 6, "name": "Щит Вечной Стали", "hp": 150, "damage": 50, "weapon": "Оружие"}
             ]
         },
         "Клинок Бури": {
             "description": "⚔️ Легкий и стремительный сет с фокусом на урон",
             "items": [
-                {"name": "Серьги Хищника", "hp": 30, "damage": 0, "head": "Голова"},
-                {"name": "Амулет Хищника", "hp": 60, "damage": 0, "body": "Тело"},
-                {"name": "Перчатки Гнева", "hp": 20, "damage": 0, "gloves": "Перчатки"},
-                {"name": "Пояс Хищника", "hp": 30, "damage": 0, "legs": "Ноги"},
-                {"name": "Сапоги Бури", "hp": 20, "damage": 0, "feet": "Ступни"},
-                {"name": "Меч Бури", "hp": 0, "damage": 200, "weapon": "Оружие"}
+                {"id": 7, "name": "Серьги Хищника", "hp": 30, "damage": 0, "head": "Голова"},
+                {"id": 8, "name": "Амулет Хищника", "hp": 60, "damage": 0, "body": "Тело"},
+                {"id": 9, "name": "Перчатки Гнева", "hp": 20, "damage": 0, "gloves": "Перчатки"},
+                {"id": 10, "name": "Пояс Хищника", "hp": 30, "damage": 0, "legs": "Ноги"},
+                {"id": 11, "name": "Сапоги Бури", "hp": 20, "damage": 0, "feet": "Ступни"},
+                {"id": 12, "name": "Меч Бури", "hp": 0, "damage": 200, "weapon": "Оружие"}
             ]
         },
         "Возмездие": {
             "description": "🗡️ Сбалансированный сет с упором на среднее здоровье и урон",
             "items": [
-                {"name": "Шлем Судьбы", "hp": 60, "damage": 0, "head": "Голова"},
-                {"name": "Амулет Правосудия", "hp": 120, "damage": 0, "body": "Тело"},
-                {"name": "Перчатки Карающего", "hp": 40, "damage": 0, "gloves": "Перчатки"},
-                {"name": "Пояс Ответа", "hp": 60, "damage": 0, "legs": "Ноги"},
-                {"name": "Сапоги Ярости", "hp": 40, "damage": 0, "feet": "Ступни"},
-                {"name": "Клинок Возмездия", "hp": 0, "damage": 100, "weapon": "Оружие"}
+                {"id": 13, "name": "Шлем Судьбы", "hp": 60, "damage": 0, "head": "Голова"},
+                {"id": 14, "name": "Амулет Правосудия", "hp": 120, "damage": 0, "body": "Тело"},
+                {"id": 15, "name": "Перчатки Карающего", "hp": 40, "damage": 0, "gloves": "Перчатки"},
+                {"id": 16, "name": "Пояс Ответа", "hp": 60, "damage": 0, "legs": "Ноги"},
+                {"id": 17, "name": "Сапоги Ярости", "hp": 40, "damage": 0, "feet": "Ступни"},
+                {"id": 18, "name": "Клинок Возмездия", "hp": 0, "damage": 100, "weapon": "Оружие"}
             ]
         }
     },
@@ -140,38 +259,39 @@ SETS = {
         "Забытый Страж": {
             "description": "🛡️ Надёжный сет с умеренным здоровьем и слабым уроном",
             "items": [
-                {"name": "Шлем Былого", "hp": 25, "damage": 0, "head": "Голова"},
-                {"name": "Доспех Чести", "hp": 75, "damage": 0, "body": "Тело"},
-                {"name": "Наручи Былого", "hp": 25, "damage": 0, "gloves": "Перчатки"},
-                {"name": "Пояс Нерушимости", "hp": 50, "damage": 0, "legs": "Ноги"},
-                {"name": "Поножи Былого", "hp": 25, "damage": 0, "feet": "Ступни"},
-                {"name": "Ржавая Секира", "hp": 0, "damage": 25, "weapon": "Оружие"}
+                {"id": 19, "name": "Шлем Былого", "hp": 25, "damage": 0, "head": "Голова"},
+                {"id": 20, "name": "Доспех Чести", "hp": 75, "damage": 0, "body": "Тело"},
+                {"id": 21, "name": "Наручи Былого", "hp": 25, "damage": 0, "gloves": "Перчатки"},
+                {"id": 22, "name": "Пояс Нерушимости", "hp": 50, "damage": 0, "legs": "Ноги"},
+                {"id": 23, "name": "Поножи Былого", "hp": 25, "damage": 0, "feet": "Ступни"},
+                {"id": 24, "name": "Ржавая Секира", "hp": 0, "damage": 25, "weapon": "Оружие"}
             ]
         },
         "Звёздный Живописец": {
             "description": "✨ Легкий сет с минимальным здоровьем, но сильным оружием",
             "items": [
-                {"name": "Капюшон Света", "hp": 5, "damage": 0, "head": "Голова"},
-                {"name": "Куртка Света", "hp": 15, "damage": 0, "body": "Тело"},
-                {"name": "Перчатки Красок", "hp": 15, "damage": 0, "gloves": "Перчатки"},
-                {"name": "Юбка Света", "hp": 10, "damage": 0, "legs": "Ноги"},
-                {"name": "Сапоги Света", "hp": 5, "damage": 0, "feet": "Ступни"},
-                {"name": "Клинок Света", "hp": 0, "damage": 100, "weapon": "Оружие"}
+                {"id": 25, "name": "Капюшон Света", "hp": 5, "damage": 0, "head": "Голова"},
+                {"id": 26, "name": "Куртка Света", "hp": 15, "damage": 0, "body": "Тело"},
+                {"id": 27, "name": "Перчатки Красок", "hp": 15, "damage": 0, "gloves": "Перчатки"},
+                {"id": 28, "name": "Юбка Света", "hp": 10, "damage": 0, "legs": "Ноги"},
+                {"id": 29, "name": "Сапоги Света", "hp": 5, "damage": 0, "feet": "Ступни"},
+                {"id": 30, "name": "Клинок Света", "hp": 0, "damage": 100, "weapon": "Оружие"}
             ]
         },
         "Охотник": {
             "description": "🏹 Сет для ловкости и средней защиты, с акцентом на оружие",
             "items": [
-                {"name": "Шляпа Охотника", "hp": 10, "damage": 0, "head": "Голова"},
-                {"name": "Плащ Теней", "hp": 40, "damage": 5, "body": "Тело"},
-                {"name": "Перчатки Охотника", "hp": 15, "damage": 0, "gloves": "Перчатки"},
-                {"name": "Штаны Охотника", "hp": 15, "damage": 0, "legs": "Ноги"},
-                {"name": "Кожаные Сапоги", "hp": 20, "damage": 0, "feet": "Ступни"},
-                {"name": "Трость-хлыст", "hp": 0, "damage": 45, "weapon": "Оружие"}
+                {"id": 31, "name": "Шляпа Охотника", "hp": 10, "damage": 0, "head": "Голова"},
+                {"id": 32, "name": "Плащ Теней", "hp": 40, "damage": 0, "body": "Тело"},
+                {"id": 33, "name": "Перчатки Охотника", "hp": 15, "damage": 0, "gloves": "Перчатки"},
+                {"id": 34, "name": "Штаны Охотника", "hp": 15, "damage": 0, "legs": "Ноги"},
+                {"id": 35, "name": "Кожаные Сапоги", "hp": 20, "damage": 0, "feet": "Ступни"},
+                {"id": 36, "name": "Трость-хлыст", "hp": 0, "damage": 50, "weapon": "Оружие"}
             ]
         }
     }
 }
+
 
 ADVENTURES = {
     "Большой Лес": {
@@ -367,6 +487,31 @@ async def ask_clan_choice(message: types.Message):
     )
     await message.answer(description, reply_markup=keyboard)
 
+
+# Обробник натискання кнопок з категоріями
+@dp.message(lambda message: message.text in ["🪖 Голова", "👕 Тело", "🧤 Руки", "👖 Ноги", "👟 Ступни", "🗡️ Оружие"])
+async def show_items(message: types.Message):
+    category = None
+    if message.text == "🪖 Голова":
+        category = "head"
+    elif message.text == "👕 Тело":
+        category = "body"
+    elif message.text == "🧤 Руки":
+        category = "gloves"
+    elif message.text == "👖 Ноги":
+        category = "legs"
+    elif message.text == "👟 Ступни":
+        category = "feet"
+    elif message.text == "🗡️ Оружие":
+        category = "weapon"
+
+    # Створюємо інлайн клавіатуру для вибраної категорії
+    keyboard = await create_inline_keyboard_from_backpack(message.from_user.id, category)
+
+    if keyboard:
+        await message.answer(f"Выберите предмет для {message.text.lower()}: ", reply_markup=keyboard)
+    else:
+        await message.answer(f"У вас нет предметов в рюкзаке для категории {message.text.lower()}.")
 # ---------- /start ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -449,6 +594,7 @@ async def start_adventure(message: types.Message, location_name: str):
 
 
 # ---------- Обработка сообщений ----------
+
 @dp.message()
 async def handle_messages(message: types.Message):
     user_id = message.from_user.id
@@ -474,29 +620,10 @@ async def handle_messages(message: types.Message):
         await ask_clan_choice(message)
         return
 
-    # Основная клавиатура профиля
-    profile_kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🎒 Рюкзак"), KeyboardButton(text="⚙️ Прокачка")],
-            [KeyboardButton(text="⬅️ Главная")]
-        ],
-        resize_keyboard=True
-    )
-
-    # Створимо клавіатуру для предметів
-    backpack_action_kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="⚔️ Надеть"), KeyboardButton(text="❌ Снять")],
-            [KeyboardButton(text="⬅️ Назад")]
-        ],
-        resize_keyboard=True
-    )
-
-    # Функція для відображення рюкзака
     async def show_backpack(message: types.Message):
-        user_id = message.from_user.id  # Отримуємо ID користувача
+        user_id = message.from_user.id  # Получаем ID пользователя
 
-        # Отримуємо дані про рюкзак з таблиці backpack в Supabase
+        # Получаем данные о рюкзаке из таблицы backpack в Supabase
         backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
 
         if backpack_data.data:
@@ -505,71 +632,48 @@ async def handle_messages(message: types.Message):
             for item in backpack_data.data:
                 item_name = item['item_name']
                 item_count = item['count']
-                items_message += f"{item_name} (Количество: {item_count} шт.)\n\n"
 
-            # Відправляємо список предметів і клавіатуру
+                # Ищем предмет в Sets, чтобы получить его характеристики (HP и урон)
+                item_info = None
+                item_category = None
+                for category_name, category_data in SETS.items():
+                    for set_name, set_data in category_data.items():
+                        for set_item in set_data['items']:
+                            if set_item['name'] == item_name:
+                                item_info = set_item
+                                item_category = category_name
+                                break
+                    if item_info:
+                        break
+
+                if item_info:
+                    item_hp = item_info['hp']
+                    item_damage = item_info['damage']
+
+                    # Определяем смайлик в зависимости от категории
+                    category_emoji = "💪" if item_category == "strong" else "🐣"
+
+                    # Формируем сообщение для каждого предмета
+                    item_message = f"{category_emoji} {item_name}:\n"
+
+                    # Если HP больше 0, выводим сердечки и количество HP
+                    if item_hp > 0:
+                        item_message += f"{item_hp} ❤️\n"
+
+                    # Если урон больше 0, выводим мечи и количество урона
+                    if item_damage > 0:
+                        item_message += f"{item_damage} ⚔️\n"
+
+                    item_message += f"Количество: {item_count} шт.\n\n"
+
+                    items_message += item_message
+                else:
+                    items_message += f"{item_name} (Неизвестные характеристики)\nКоличество: {item_count} шт.\n\n"
+
+            # Отправляем сообщение с предметами и клавиатурой
             await message.answer(items_message, reply_markup=backpack_action_kb)
         else:
             await message.answer("У вас нет вещей в рюкзаке.", reply_markup=backpack_action_kb)
-
-        # Дожидаемся ввода названия предмета
-
-
-    async def process_item_name(msg: types.Message):
-        item_name = msg.text.strip()  # Убираем лишние пробелы
-        user_id = msg.from_user.id
-
-        # Получаем данные из рюкзака пользователя
-        backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
-
-        item_found = False
-        for item in backpack_data.data:
-            if item['item_name'] == item_name:
-                item_found = True
-                item_count = item['count']
-                if item_count > 0:
-                    # Перебираем все сеты, чтобы найти нужную часть тела
-                    item_details = None
-                    part_of_body = None  # Для слота
-                    for set_type, set_data in SETS.items():
-                        for set_name, set_items in set_data.items():
-                            for set_item in set_items['items']:
-                                if set_item['name'] == item_name:
-                                    item_details = set_item
-                                    part_of_body = next(iter(set_item.keys()))  # Получаем название части тела
-                                    break
-                            if item_details:
-                                break
-                        if item_details:
-                            break
-
-                    if item_details and part_of_body:
-                        # Если нашли нужный слот, обновляем данные пользователя
-                        update_data = {part_of_body: item_name}
-                        supabase.table("users").update(update_data).eq("user_id", user_id).execute()
-
-                        # Уменьшаем количество предмета в рюкзаке
-                        new_count = item_count - 1
-                        supabase.table("backpack").update({"count": new_count}).eq("user_id", user_id).eq(
-                            "item_name", item_name).execute()
-
-                        await msg.answer(f"Вы одели {item_name} на {part_of_body}!", reply_markup=backpack_action_kb)
-                        return
-                    else:
-                        await msg.answer("Не удалось найти подходящий слот для этого предмета.",
-                                         reply_markup=backpack_action_kb)
-                        return
-                else:
-                    await msg.answer(f"У вас нет предмета: {item_name} в рюкзаке.", reply_markup=backpack_action_kb)
-                    return
-
-        if not item_found:
-            await msg.answer("Предмет не найден в рюкзаке.", reply_markup=backpack_action_kb)
-
-    # Обробка натискання кнопки "Надеть"
-    async def handle_equip(message: types.Message):
-        await message.answer("Введите название предмета, который вы хотите надеть:",
-                             reply_markup=types.ReplyKeyboardRemove())
 
     # Основной блок обработки сообщений
     if text == "👤 Профиль":
@@ -603,13 +707,36 @@ async def handle_messages(message: types.Message):
         await show_backpack(message)
 
     elif text == "⚔️ Надеть":
-        await handle_equip(message)
+        # Показываем клавиатуру для выбора части тела
+        await message.answer("Выберите, что надеть:", reply_markup=equip_kb)
 
-    elif text == "❌ Снять":
-        await message.answer("Виберіть предмет для зняття.", reply_markup=backpack_action_kb)
+    elif text == "🪖 Голова":
+        # Показываем клавиатуру для выбора предметов для головы
+        await message.answer("Выберите предмет для головы:", reply_markup=head_kb)
+
+    elif text == "👕 Тело":
+        # Показываем клавиатуру для выбора предметов для тела
+        await message.answer("Выберите предмет для тела:", reply_markup=body_kb)
+
+    elif text == "🧤 Руки":
+        # Показываем клавиатуру для выбора перчаток
+        await message.answer("Выберите предмет для рук:", reply_markup=gloves_kb)
+
+    elif text == "👖 Ноги":
+        # Показываем клавиатуру для выбора предметов для ног
+        await message.answer("Выберите предмет для ног:", reply_markup=legs_kb)
+
+    elif text == "👟 Ступни":
+        # Показываем клавиатуру для выбора предметов для ступней
+        await message.answer("Выберите предмет для ступней:", reply_markup=feet_kb)
+
+    elif text == "🗡️ Оружие":
+        # Показываем клавиатуру для выбора оружия
+        await message.answer("Выберите оружие:", reply_markup=weapon_kb)
 
     elif text == "⬅️ Назад":
-        await message.answer("Головне меню:", reply_markup=profile_kb)
+        # Возвращаем в рюкзак
+        await message.answer("Ваши вещи в рюкзаке:", reply_markup=backpack_action_kb)
 
     elif text == "⚙️ Прокачка":
         upgrade_kb = ReplyKeyboardMarkup(
@@ -648,7 +775,7 @@ async def handle_messages(message: types.Message):
             f"🎯 Очки прокачки: <b>{new_user['level_points']}</b>"
         )
 
-    elif text == "⬅️ Назад":
+    elif text == "⬅️Назад":
         await message.answer("Главное меню:", reply_markup=profile_kb)
 
     elif text == "⬅️ Главная":
@@ -728,6 +855,7 @@ async def handle_messages(message: types.Message):
 
     elif text == "🛍️ Торговля":
         await message.answer("⚙️ В разработке...", reply_markup=main_menu_kb)
+
 
 # ---------- Callback: Clan selection ----------
 @dp.callback_query()
