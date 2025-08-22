@@ -78,7 +78,15 @@ equip_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
-
+# Клавиатура для снятия экипировки
+unequip_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="❌ Голова"), KeyboardButton(text="❌ Тело"), KeyboardButton(text="❌ Руки")],
+        [KeyboardButton(text="❌ Ноги"), KeyboardButton(text="❌ Ступни"), KeyboardButton(text="❌ Оружие")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
 
 async def notify_users_on_start():
     print("Бот запущен и уведомляет пользователей...")
@@ -512,6 +520,61 @@ async def show_items(message: types.Message):
         await message.answer(f"Выберите предмет для {message.text.lower()}: ", reply_markup=keyboard)
     else:
         await message.answer(f"У вас нет предметов в рюкзаке для категории {message.text.lower()}.")
+
+@dp.message(lambda message: message.text in ["❌ Голова", "❌ Тело", "❌ Руки", "❌ Ноги", "❌ Ступни", "❌ Оружие"])
+async def unequip_item(message: types.Message):
+    user_id = message.from_user.id
+    text_to_category = {
+        "❌ Голова": "head",
+        "❌ Тело": "body",
+        "❌ Руки": "gloves",
+        "❌ Ноги": "legs",
+        "❌ Ступни": "feet",
+        "❌ Оружие": "weapon",
+    }
+
+    category = text_to_category[message.text]
+
+    # Получаем данные пользователя
+    user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
+    if not user_data.data:
+        await message.answer("Пользователь не найден.")
+        return
+
+    equipped_item = user_data.data.get(category)
+
+    if not equipped_item or equipped_item == "нет":
+        await message.answer(f"На {message.text[2:].lower()} ничего не надето.")
+        return
+
+    existing_entry = supabase.table("backpack") \
+        .select("count") \
+        .eq("user_id", user_id) \
+        .eq("item_name", equipped_item) \
+        .maybe_single() \
+        .execute()
+
+    # Проверка на None и на наличие данных
+    if existing_entry and existing_entry.data:
+        new_count = existing_entry.data["count"] + 1
+        supabase.table("backpack") \
+            .update({"count": new_count}) \
+            .eq("user_id", user_id) \
+            .eq("item_name", equipped_item) \
+            .execute()
+    else:
+        # Если записи нет, создаем новую
+        supabase.table("backpack") \
+            .insert({"user_id": user_id, "item_name": equipped_item, "count": 1}) \
+            .execute()
+
+    # Удаляем предмет из экипировки
+    supabase.table("users") \
+        .update({category: "нет"}) \
+        .eq("user_id", user_id) \
+        .execute()
+
+    await message.answer(f"Вы сняли предмет: {equipped_item} с {message.text[2:].lower()}.")
 # ---------- /start ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -709,30 +772,10 @@ async def handle_messages(message: types.Message):
     elif text == "⚔️ Надеть":
         # Показываем клавиатуру для выбора части тела
         await message.answer("Выберите, что надеть:", reply_markup=equip_kb)
+    elif text == "❌ Снять":
+        # Показываем клавиатуру для выбора части тела
+        await message.answer("Выберите, что надеть:", reply_markup=unequip_kb)
 
-    elif text == "🪖 Голова":
-        # Показываем клавиатуру для выбора предметов для головы
-        await message.answer("Выберите предмет для головы:", reply_markup=head_kb)
-
-    elif text == "👕 Тело":
-        # Показываем клавиатуру для выбора предметов для тела
-        await message.answer("Выберите предмет для тела:", reply_markup=body_kb)
-
-    elif text == "🧤 Руки":
-        # Показываем клавиатуру для выбора перчаток
-        await message.answer("Выберите предмет для рук:", reply_markup=gloves_kb)
-
-    elif text == "👖 Ноги":
-        # Показываем клавиатуру для выбора предметов для ног
-        await message.answer("Выберите предмет для ног:", reply_markup=legs_kb)
-
-    elif text == "👟 Ступни":
-        # Показываем клавиатуру для выбора предметов для ступней
-        await message.answer("Выберите предмет для ступней:", reply_markup=feet_kb)
-
-    elif text == "🗡️ Оружие":
-        # Показываем клавиатуру для выбора оружия
-        await message.answer("Выберите оружие:", reply_markup=weapon_kb)
 
     elif text == "⬅️ Назад":
         # Возвращаем в рюкзак
@@ -857,7 +900,92 @@ async def handle_messages(message: types.Message):
         await message.answer("⚙️ В разработке...", reply_markup=main_menu_kb)
 
 
-# ---------- Callback: Clan selection ----------
+
+# ---------- Callback:----------
+@dp.callback_query(lambda c: c.data.startswith("equip_"))
+async def handle_item_selection(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    selected_item_callback = callback_query.data
+
+    selected_item = None
+    item_category = None
+    for category_name, category_data in items.items():
+        for item in category_data:
+            if item['callback_data'] == selected_item_callback:
+                selected_item = item
+                item_category = category_name
+                break
+        if selected_item:
+            break
+
+    if not selected_item:
+        await callback_query.answer("❗ Предмет не найден.", show_alert=True)
+        return
+
+    user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
+    if not user_data.data:
+        await callback_query.answer("❗ Пользователь не найден.", show_alert=True)
+        return
+
+    current_equipped = user_data.data.get(item_category)
+
+    if current_equipped and current_equipped != "нет":
+        await callback_query.answer(f"⛔ Уже надет: {current_equipped}", show_alert=True)
+        return
+
+    backpack_entry = supabase.table("backpack").select("count")\
+        .eq("user_id", user_id).eq("item_name", selected_item["name"]).single().execute()
+
+    if not backpack_entry.data or backpack_entry.data["count"] < 1:
+        await callback_query.answer("❗ У вас нет этого предмета.", show_alert=True)
+        return
+
+    new_count = backpack_entry.data["count"] - 1
+
+    if new_count == 0:
+        supabase.table("backpack").delete().eq("user_id", user_id).eq("item_name", selected_item["name"]).execute()
+    else:
+        supabase.table("backpack").update({"count": new_count})\
+            .eq("user_id", user_id).eq("item_name", selected_item["name"]).execute()
+
+    supabase.table("users").update({item_category: selected_item["name"]}).eq("user_id", user_id).execute()
+
+    await callback_query.message.edit_reply_markup()
+    await callback_query.message.answer(f"✅ Надето: <b>{selected_item['name']}</b> на {item_category}")
+
+
+
+@dp.callback_query(lambda c: c.data.startswith("unequip_"))
+async def unequip_item(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    category = callback.data.split("_")[1]
+
+    user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
+    if not user_data.data:
+        await callback.answer("❗ Пользователь не найден.", show_alert=True)
+        return
+
+    current_item = user_data.data.get(category)
+    if not current_item or current_item == "нет":
+        await callback.answer("❗ Нет предмета для снятия.", show_alert=True)
+        return
+
+    existing_entry = supabase.table("backpack").select("count")\
+        .eq("user_id", user_id).eq("item_name", current_item).execute()
+
+    if existing_entry.data:
+        current_count = existing_entry.data[0]["count"]
+        supabase.table("backpack").update({"count": current_count + 1})\
+            .eq("user_id", user_id).eq("item_name", current_item).execute()
+    else:
+        supabase.table("backpack").insert({"user_id": user_id, "item_name": current_item, "count": 1}).execute()
+
+    supabase.table("users").update({category: "нет"}).eq("user_id", user_id).execute()
+    await callback.message.edit_reply_markup()
+    await callback.message.answer(f"❌ Снято: <b>{current_item}</b> с {category}")
+
+
+
 @dp.callback_query()
 async def handle_clan_callbacks(callback: types.CallbackQuery):
     user_id = callback.from_user.id
