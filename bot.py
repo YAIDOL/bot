@@ -168,6 +168,15 @@ async def create_inline_keyboard_from_backpack(user_id, category):
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     return keyboard
+
+
+def get_item_stats(item_name):
+    for tier in SETS.values():
+        for set_data in tier.values():
+            for item in set_data["items"]:
+                if item["name"] == item_name:
+                    return item["hp"], item["damage"]
+    return 0, 0
 # ---------- Clans ----------
 CLANS = {
     "Звездные стражи 🌌": "🛡 <b>Звездные стражи</b> — это древнее и неуловимое братство, чья связь с космосом и тайнами вселенной глубока и неразрывна. Они — вечные наблюдатели, хранители небесного порядка и защитники миров от угроз, исходящих из бездны космоса. Их взгляд устремлен к звездам, а сердца бьются в ритме галактических циклов.",
@@ -175,55 +184,54 @@ CLANS = {
     "Тенистые клинки 🌑": "🌑 <b>Тенистые клинки</b> — это древнее братство, чье существование окутано тайной и легендами. Они не стремятся к славе или открытому признанию, предпочитая действовать из теней, словно невидимые вихри, которые оставляют за собой лишь след судьбы.",
     "Безмолвные песни 🎵": "🎵 <b>Безмолвные песни</b> — это загадочное и меланхоличное сообщество, чье существование окутано завесой печали и древних тайн. Они не владеют острыми клинками или громогласными криками, их оружие — это эмоции, воспоминания и эхо забытых мелодий. Члены этого клана — хранители скорби, носители утерянных историй и проводники через лабиринты человеческих чувств."
 }
-# Словник всіх предметів
 items = {
     "head": [
-        {"name": "Шлем Стража", "callback_data": "helmet_guard"},
-        {"name": "Серьги Хищника", "callback_data": "ear_predator"},
-        {"name": "Шлем Судьбы", "callback_data": "helmet_fate"},
-        {"name": "Шлем Былого", "callback_data": "helmet_of_old"},
-        {"name": "Капюшон Света", "callback_data": "hood_of_light"},
-        {"name": "Шляпа Охотника", "callback_data": "hunter_hat"}
+        {"name": "Шлем Стража", "callback_data": "equip_helmet_guard"},
+        {"name": "Серьги Хищника", "callback_data": "equip_ear_predator"},
+        {"name": "Шлем Судьбы", "callback_data": "equip_helmet_fate"},
+        {"name": "Шлем Былого", "callback_data": "equip_helmet_of_old"},
+        {"name": "Капюшон Света", "callback_data": "equip_hood_of_light"},
+        {"name": "Шляпа Охотника", "callback_data": "equip_hunter_hat"}
     ],
     "body": [
-        {"name": "Плащ Жизни", "callback_data": "cloak_of_life"},
-        {"name": "Амулет Хищника", "callback_data": "amulet_of_predator"},
-        {"name": "Амулет Правосудия", "callback_data": "amulet_of_justice"},
-        {"name": "Доспех Чести", "callback_data": "armor_of_honor"},
-        {"name": "Куртка Света", "callback_data": "jacket_of_light"},
-        {"name": "Плащ Теней", "callback_data": "cloak_of_shadows"}
+        {"name": "Плащ Жизни", "callback_data": "equip_cloak_of_life"},
+        {"name": "Амулет Хищника", "callback_data": "equip_amulet_of_predator"},
+        {"name": "Амулет Правосудия", "callback_data": "equip_amulet_of_justice"},
+        {"name": "Доспех Чести", "callback_data": "equip_armor_of_honor"},
+        {"name": "Куртка Света", "callback_data": "equip_jacket_of_light"},
+        {"name": "Плащ Теней", "callback_data": "equip_cloak_of_shadows"}
     ],
     "gloves": [
-        {"name": "Перчатки Защиты", "callback_data": "gloves_of_protection"},
-        {"name": "Перчатки Гнева", "callback_data": "gloves_of_wrath"},
-        {"name": "Перчатки Карающего", "callback_data": "gloves_of_avenger"},
-        {"name": "Наручи Былого", "callback_data": "bracers_of_old"},
-        {"name": "Перчатки Красок", "callback_data": "gloves_of_paint"},
-        {"name": "Перчатки Охотника", "callback_data": "hunter_gloves"}
+        {"name": "Перчатки Защиты", "callback_data": "equip_gloves_of_protection"},
+        {"name": "Перчатки Гнева", "callback_data": "equip_gloves_of_wrath"},
+        {"name": "Перчатки Карающего", "callback_data": "equip_gloves_of_avenger"},
+        {"name": "Наручи Былого", "callback_data": "equip_bracers_of_old"},
+        {"name": "Перчатки Красок", "callback_data": "equip_gloves_of_paint"},
+        {"name": "Перчатки Охотника", "callback_data": "equip_hunter_gloves"}
     ],
     "legs": [
-        {"name": "Пояс Скалы", "callback_data": "belt_of_rock"},
-        {"name": "Пояс Хищника", "callback_data": "belt_of_predator"},
-        {"name": "Пояс Ответа", "callback_data": "belt_of_revenge"},
-        {"name": "Пояс Нерушимости", "callback_data": "belt_of_indestructibility"},
-        {"name": "Юбка Света", "callback_data": "skirt_of_light"},
-        {"name": "Штаны Охотника", "callback_data": "hunter_pants"}
+        {"name": "Пояс Скалы", "callback_data": "equip_belt_of_rock"},
+        {"name": "Пояс Хищника", "callback_data": "equip_belt_of_predator"},
+        {"name": "Пояс Ответа", "callback_data": "equip_belt_of_revenge"},
+        {"name": "Пояс Нерушимости", "callback_data": "equip_belt_of_indestructibility"},
+        {"name": "Юбка Света", "callback_data": "equip_skirt_of_light"},
+        {"name": "Штаны Охотника", "callback_data": "equip_hunter_pants"}
     ],
     "feet": [
-        {"name": "Наручи Титана", "callback_data": "bracers_of_titan"},
-        {"name": "Сапоги Бури", "callback_data": "boots_of_storm"},
-        {"name": "Сапоги Ярости", "callback_data": "boots_of_rage"},
-        {"name": "Поножи Былого", "callback_data": "greaves_of_old"},
-        {"name": "Сапоги Света", "callback_data": "boots_of_light"},
-        {"name": "Кожаные Сапоги", "callback_data": "leather_boots"}
+        {"name": "Наручи Титана", "callback_data": "equip_bracers_of_titan"},
+        {"name": "Сапоги Бури", "callback_data": "equip_boots_of_storm"},
+        {"name": "Сапоги Ярости", "callback_data": "equip_boots_of_rage"},
+        {"name": "Поножи Былого", "callback_data": "equip_greaves_of_old"},
+        {"name": "Сапоги Света", "callback_data": "equip_boots_of_light"},
+        {"name": "Кожаные Сапоги", "callback_data": "equip_leather_boots"}
     ],
     "weapon": [
-        {"name": "Щит Вечной Стали", "callback_data": "shield_of_eternal_steel"},
-        {"name": "Меч Бури", "callback_data": "sword_of_storm"},
-        {"name": "Клинок Возмездия", "callback_data": "blade_of_vengeance"},
-        {"name": "Ржавая Секира", "callback_data": "rusty_axe"},
-        {"name": "Клинок Света", "callback_data": "blade_of_light"},
-        {"name": "Трость-хлыст", "callback_data": "whip_staff"}
+        {"name": "Щит Вечной Стали", "callback_data": "equip_shield_of_eternal_steel"},
+        {"name": "Меч Бури", "callback_data": "equip_sword_of_storm"},
+        {"name": "Клинок Возмездия", "callback_data": "equip_blade_of_vengeance"},
+        {"name": "Ржавая Секира", "callback_data": "equip_rusty_axe"},
+        {"name": "Клинок Света", "callback_data": "equip_blade_of_light"},
+        {"name": "Трость-хлыст", "callback_data": "equip_whip_staff"}
     ]
 }
 
@@ -574,7 +582,7 @@ async def unequip_item(message: types.Message):
         .eq("user_id", user_id) \
         .execute()
 
-    await message.answer(f"Вы сняли предмет: {equipped_item} с {message.text[2:].lower()}.")
+    await message.answer(f"Вы сняли предмет: {equipped_item} .")
 # ---------- /start ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -909,6 +917,8 @@ async def handle_item_selection(callback_query: types.CallbackQuery):
 
     selected_item = None
     item_category = None
+
+    # Поиск предмета в словаре items
     for category_name, category_data in items.items():
         for item in category_data:
             if item['callback_data'] == selected_item_callback:
@@ -922,17 +932,18 @@ async def handle_item_selection(callback_query: types.CallbackQuery):
         await callback_query.answer("❗ Предмет не найден.", show_alert=True)
         return
 
+    # Получаем данные пользователя
     user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
     if not user_data.data:
         await callback_query.answer("❗ Пользователь не найден.", show_alert=True)
         return
 
     current_equipped = user_data.data.get(item_category)
-
     if current_equipped and current_equipped != "нет":
-        await callback_query.answer(f"⛔ Уже надет: {current_equipped}", show_alert=True)
+        await callback_query.answer(f"⛔ Уже надето: {current_equipped}", show_alert=True)
         return
 
+    # Проверяем наличие предмета в рюкзаке
     backpack_entry = supabase.table("backpack").select("count")\
         .eq("user_id", user_id).eq("item_name", selected_item["name"]).single().execute()
 
@@ -942,23 +953,33 @@ async def handle_item_selection(callback_query: types.CallbackQuery):
 
     new_count = backpack_entry.data["count"] - 1
 
+    # Уменьшаем количество предмета в рюкзаке или удаляем
     if new_count == 0:
         supabase.table("backpack").delete().eq("user_id", user_id).eq("item_name", selected_item["name"]).execute()
     else:
         supabase.table("backpack").update({"count": new_count})\
             .eq("user_id", user_id).eq("item_name", selected_item["name"]).execute()
 
-    supabase.table("users").update({item_category: selected_item["name"]}).eq("user_id", user_id).execute()
+    # Получаем бонусы предмета
+    hp_bonus, damage_bonus = get_item_stats(selected_item["name"])
+
+    # Обновляем экипировку и характеристики
+    supabase.table("users").update({
+        item_category: selected_item["name"],
+        "health": user_data.data.get("health", 0) + hp_bonus,
+        "attack": user_data.data.get("attack", 0) + damage_bonus
+    }).eq("user_id", user_id).execute()
 
     await callback_query.message.edit_reply_markup()
-    await callback_query.message.answer(f"✅ Надето: <b>{selected_item['name']}</b> на {item_category}")
+    await callback_query.message.answer(f"✅ Надето: <b>{selected_item['name']}</b>")
+
 
 
 
 @dp.callback_query(lambda c: c.data.startswith("unequip_"))
 async def unequip_item(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    category = callback.data.split("_")[1]
+    category = callback.data.split("_")[1]  # Например: head, body и т.д.
 
     user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
     if not user_data.data:
@@ -970,19 +991,34 @@ async def unequip_item(callback: types.CallbackQuery):
         await callback.answer("❗ Нет предмета для снятия.", show_alert=True)
         return
 
+    # Возвращаем предмет в рюкзак
     existing_entry = supabase.table("backpack").select("count")\
-        .eq("user_id", user_id).eq("item_name", current_item).execute()
+        .eq("user_id", user_id).eq("item_name", current_item).maybe_single().execute()
 
     if existing_entry.data:
-        current_count = existing_entry.data[0]["count"]
+        current_count = existing_entry.data["count"]
         supabase.table("backpack").update({"count": current_count + 1})\
             .eq("user_id", user_id).eq("item_name", current_item).execute()
     else:
-        supabase.table("backpack").insert({"user_id": user_id, "item_name": current_item, "count": 1}).execute()
+        supabase.table("backpack").insert({
+            "user_id": user_id,
+            "item_name": current_item,
+            "count": 1
+        }).execute()
 
-    supabase.table("users").update({category: "нет"}).eq("user_id", user_id).execute()
+    # Получаем характеристики предмета
+    hp_bonus, damage_bonus = get_item_stats(current_item)
+
+    # Обновляем экипировку и характеристики
+    supabase.table("users").update({
+        category: "нет",
+        "health": user_data.data.get("health", 0) - hp_bonus,
+        "attack": user_data.data.get("attack", 0) - damage_bonus
+    }).eq("user_id", user_id).execute()
+
     await callback.message.edit_reply_markup()
-    await callback.message.answer(f"❌ Снято: <b>{current_item}</b> с {category}")
+    await callback.message.answer(f"❌ Снято: <b>{current_item}</b>")
+
 
 
 
