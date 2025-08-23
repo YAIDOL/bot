@@ -529,60 +529,68 @@ async def show_items(message: types.Message):
     else:
         await message.answer(f"У вас нет предметов в рюкзаке для категории {message.text.lower()}.")
 
+
 @dp.message(lambda message: message.text in ["❌ Голова", "❌ Тело", "❌ Руки", "❌ Ноги", "❌ Ступни", "❌ Оружие"])
 async def unequip_item(message: types.Message):
     user_id = message.from_user.id
-    text_to_category = {
+
+    # Определение категории
+    category_map = {
         "❌ Голова": "head",
         "❌ Тело": "body",
         "❌ Руки": "gloves",
         "❌ Ноги": "legs",
         "❌ Ступни": "feet",
-        "❌ Оружие": "weapon",
+        "❌ Оружие": "weapon"
     }
-
-    category = text_to_category[message.text]
+    category = category_map[message.text]
 
     # Получаем данные пользователя
     user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
     if not user_data.data:
-        await message.answer("Пользователь не найден.")
+        await message.answer("❗ Пользователь не найден.")
         return
 
     equipped_item = user_data.data.get(category)
 
     if not equipped_item or equipped_item == "нет":
-        await message.answer(f"На {message.text[2:].lower()} ничего не надето.")
+        await message.answer("⚠️ В этой категории ничего не надето.")
         return
 
-    existing_entry = supabase.table("backpack") \
-        .select("count") \
-        .eq("user_id", user_id) \
-        .eq("item_name", equipped_item) \
-        .maybe_single() \
-        .execute()
+    # Получаем бонусы предмета
+    hp_bonus, damage_bonus = get_item_stats(equipped_item)
 
-    # Проверка на None и на наличие данных
-    if existing_entry and existing_entry.data:
-        new_count = existing_entry.data["count"] + 1
-        supabase.table("backpack") \
-            .update({"count": new_count}) \
-            .eq("user_id", user_id) \
-            .eq("item_name", equipped_item) \
-            .execute()
+    # Обновляем экипировку и характеристики
+    new_health = max(0, user_data.data.get("health", 0) - hp_bonus)
+    new_attack = max(0, user_data.data.get("attack", 0) - damage_bonus)
+
+    supabase.table("users").update({
+        category: "нет",
+        "health": new_health,
+        "attack": new_attack
+    }).eq("user_id", user_id).execute()
+
+    # Обновляем/добавляем в рюкзак
+    backpack_response = supabase.table("backpack").select("count")\
+        .eq("user_id", user_id).eq("item_name", equipped_item).execute()
+
+    backpack_data = backpack_response.data[0] if backpack_response.data else None
+
+    if backpack_data:
+        new_count = backpack_data["count"] + 1
+        supabase.table("backpack").update({"count": new_count})\
+            .eq("user_id", user_id).eq("item_name", equipped_item).execute()
     else:
-        # Если записи нет, создаем новую
-        supabase.table("backpack") \
-            .insert({"user_id": user_id, "item_name": equipped_item, "count": 1}) \
-            .execute()
+        supabase.table("backpack").insert({
+            "user_id": user_id,
+            "item_name": equipped_item,
+            "count": 1
+        }).execute()
 
-    # Удаляем предмет из экипировки
-    supabase.table("users") \
-        .update({category: "нет"}) \
-        .eq("user_id", user_id) \
-        .execute()
+    await message.answer(f"❌ Снято: <b>{equipped_item}</b>")
 
-    await message.answer(f"Вы сняли предмет: {equipped_item} .")
+
+
 # ---------- /start ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -972,55 +980,6 @@ async def handle_item_selection(callback_query: types.CallbackQuery):
 
     await callback_query.message.edit_reply_markup()
     await callback_query.message.answer(f"✅ Надето: <b>{selected_item['name']}</b>")
-
-
-
-
-@dp.callback_query(lambda c: c.data.startswith("unequip_"))
-async def unequip_item(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    category = callback.data.split("_")[1]  # Например: head, body и т.д.
-
-    user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
-    if not user_data.data:
-        await callback.answer("❗ Пользователь не найден.", show_alert=True)
-        return
-
-    current_item = user_data.data.get(category)
-    if not current_item or current_item == "нет":
-        await callback.answer("❗ Нет предмета для снятия.", show_alert=True)
-        return
-
-    # Возвращаем предмет в рюкзак
-    existing_entry = supabase.table("backpack").select("count")\
-        .eq("user_id", user_id).eq("item_name", current_item).maybe_single().execute()
-
-    if existing_entry.data:
-        current_count = existing_entry.data["count"]
-        supabase.table("backpack").update({"count": current_count + 1})\
-            .eq("user_id", user_id).eq("item_name", current_item).execute()
-    else:
-        supabase.table("backpack").insert({
-            "user_id": user_id,
-            "item_name": current_item,
-            "count": 1
-        }).execute()
-
-    # Получаем характеристики предмета
-    hp_bonus, damage_bonus = get_item_stats(current_item)
-
-    # Обновляем экипировку и характеристики
-    supabase.table("users").update({
-        category: "нет",
-        "health": user_data.data.get("health", 0) - hp_bonus,
-        "attack": user_data.data.get("attack", 0) - damage_bonus
-    }).eq("user_id", user_id).execute()
-
-    await callback.message.edit_reply_markup()
-    await callback.message.answer(f"❌ Снято: <b>{current_item}</b>")
-
-
-
 
 @dp.callback_query()
 async def handle_clan_callbacks(callback: types.CallbackQuery):
