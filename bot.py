@@ -2,7 +2,7 @@ import os
 import asyncio
 import re
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 
 # ---------- Load environment ----------
+now = datetime.now(timezone.utc)
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -27,6 +28,22 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 waiting_for_nick = set()
 
 # ---------- Keyboards ----------
+donate_shop_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="👑 Премиум")],
+        [KeyboardButton(text="⬅️ Назад (торговля)")]
+    ],
+    resize_keyboard=True
+)
+trade_menu_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🛒 Магазин"), KeyboardButton(text="💎 Донат Магазин"), KeyboardButton(text="🏪 Рынок")],
+        [KeyboardButton(text="⬅️ Главная")]
+    ],
+    resize_keyboard=True
+)
+
+
 main_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🗺️ Приключения"), KeyboardButton(text="⚒️ Кузница")],
@@ -591,6 +608,7 @@ async def unequip_item(message: types.Message):
 
 
 
+
 # ---------- /start ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -755,14 +773,35 @@ async def handle_messages(message: types.Message):
             await message.answer("У вас нет вещей в рюкзаке.", reply_markup=backpack_action_kb)
 
     # Основной блок обработки сообщений
+
     if text == "👤 Профиль":
         response = supabase.table("users").select("*").eq("user_id", user_id).execute()
         row = response.data[0] if response.data else None
+
         if row:
             clan_desc = CLANS.get(row.get("clan", ""), "")
+
+            # Проверка и форматирование премиума
+            premium_status = "Не активен"
+            premium_remaining = ""
+
+            premium_until_str = row.get("premium_until")
+            if premium_until_str:
+                premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                if premium_until > now:
+                    premium_status = "✅ Активен"
+                    remaining = premium_until - now
+                    days = remaining.days
+                    hours = remaining.seconds // 3600
+                    premium_remaining = f"\nОсталось: {days} д. {hours} ч."
+                else:
+                    premium_status = "❌ Не активен"
+
             profile_text = (
                 f"<b>{row['username']}</b> | <code>{user_id}</code>\n"
-                f"Статус аккаунта: {row['status']}\n\n"
+                f"Статус аккаунта: {row['status']}\n"
+                f"Премиум статус: {premium_status}{premium_remaining}\n\n"
                 f"🌟 Уровень: {row['level']}\n"
                 f"Опыт: {row['exp']} / {row['exp_max']}\n"
                 f"Очки прокачки: {row.get('level_points', 0)}\n"
@@ -777,6 +816,7 @@ async def handle_messages(message: types.Message):
                 f"Оружие: {row['weapon']}\n"
                 f"💪 Клан: {row.get('clan', 'нет')}"
             )
+
             await message.answer(profile_text, reply_markup=profile_kb)
         else:
             waiting_for_nick.add(user_id)
@@ -801,7 +841,7 @@ async def handle_messages(message: types.Message):
         upgrade_kb = ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="❤️ Здоровье"), KeyboardButton(text="🗡️ Урон")],
-                [KeyboardButton(text="⬅️ Назад")]
+                [KeyboardButton(text="⬅️ Назад ")]
             ],
             resize_keyboard=True
         )
@@ -912,12 +952,101 @@ async def handle_messages(message: types.Message):
     elif text in ("⚔️ Заточка", "🔨 Крафт"):
         await message.answer("⚙️ В разработке...", reply_markup=forge_menu_kb)
 
+
+
     elif text == "🛍️ Торговля":
-        await message.answer("⚙️ В разработке...", reply_markup=main_menu_kb)
+        await message.answer("Выберите раздел торговли:", reply_markup=trade_menu_kb)
+
+    elif text == "⬅️ Главная":
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+
+    elif text == "🛒 Магазин":
+        await message.answer("🛒 Открываю магазин...")
 
 
+    elif text == "💎 Донат Магазин":
+        await message.answer("💎 Донат-магазин:\nВыберите категорию:", reply_markup=donate_shop_kb)
 
-# ---------- Callback:----------
+    elif text == "👑 Премиум":
+        premium_text = (
+            "👑 *Премиум-аккаунт*\n\n"
+            "💰 Стоимость: 5к\n"
+            "🕘 Длительность: 7 дней\n"
+            "📈 +30% опыта\n"
+            "💰 +50% денег\n"
+            "🍀 +10% удачи\n\n"
+            "Получите преимущества уже сейчас!"
+        )
+
+        # Инлайн-кнопка
+        buy_premium_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="💳 Купить Премиум", callback_data="buy_premium")]
+            ]
+        )
+
+        await message.answer(premium_text, reply_markup=buy_premium_kb, parse_mode="Markdown")
+
+    elif text == "⬅️ Назад (торговля)":
+        await message.answer("Возвращаемся в раздел 'Торговля':", reply_markup=trade_menu_kb)
+
+
+    elif text == "🏪 Рынок":
+        await message.answer("🏪 Здесь будет рынок.")
+
+
+from datetime import datetime, timedelta, timezone
+
+@dp.callback_query(lambda c: c.data == "buy_premium")
+async def buy_premium_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+
+    # Получаем пользователя
+    result = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
+    user = result.data
+
+    if not user:
+        await callback_query.message.edit_text("❌ Пользователь не найден в базе данных.")
+        return
+
+    money = user.get("money", 0)
+
+    if money < 5000:
+        await callback_query.message.edit_text("❌ Недостаточно средств для покупки премиума.")
+        return
+
+    now = datetime.now(timezone.utc)
+    premium_until_str = user.get("premium_until")
+    premium_until = None
+
+    if premium_until_str:
+        try:
+            premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
+        except Exception:
+            premium_until = None
+
+    if premium_until and premium_until > now:
+        # Продлеваем премиум на 7 дней с текущей даты premium_until
+        new_premium_until = premium_until + timedelta(days=7)
+        message_text = "✅ К вашему сроку добавлено 7 дней премиума!"
+    else:
+        # Активируем премиум на 7 дней с текущего времени
+        new_premium_until = now + timedelta(days=7)
+        message_text = "🎉 Премиум успешно активирован на 7 дней!"
+
+    # Форматируем дату в ISO с 'Z'
+    new_premium_until_iso = new_premium_until.isoformat(timespec='seconds').replace('+00:00', 'Z')
+
+    # Обновляем пользователя в базе
+    supabase.table("users").update({
+        "money": money - 5000,
+        "premium": True,
+        "premium_until": new_premium_until_iso
+    }).eq("user_id", user_id).execute()
+
+    await callback_query.message.edit_text(message_text)
+
+    
 @dp.callback_query(lambda c: c.data.startswith("equip_"))
 async def handle_item_selection(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
@@ -987,6 +1116,27 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
     data = callback.data
 
     try:
+        user_id = callback.from_user.id
+        data = callback.data
+
+        # 🔒 Проверка статуса премиума
+        user_result = supabase.table("users").select("premium_until, premium").eq("user_id", user_id).single().execute()
+        user = user_result.data
+
+        if user:
+            premium_until_str = user.get("premium_until")
+            if premium_until_str:
+                premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)  # Зонований поточний час UTC
+                if premium_until < now:
+                    # Преміум закінчився
+                    supabase.table("users").update({
+                        "premium": False,
+                        "premium_until": None
+                    }).eq("user_id", user_id).execute()
+
+                    await callback.answer("⛔ Ваш премиум закончился.", show_alert=True)
+                    return
         if data.startswith("clan_"):
             await callback.answer()
             clan_key = data[5:]
@@ -1135,11 +1285,35 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
             await asyncio.sleep(duration)
             # Завершение приключения — награды
             # Обновляем деньги и опыт
+
+            premium_resp = supabase.table("users").select("premium_until").eq("user_id", user_id).execute()
+            premium_until_str = premium_resp.data[0].get("premium_until") if premium_resp.data else None
+            premium_active = False
+
+            if premium_until_str:
+                premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                if premium_until > now:
+                    premium_active = True
+
+            # Генерируем опыт и деньги
+            base_exp = random.randint(*location["exp"])
+            base_money = random.randint(*location["money"])
+
+            bonus_exp = int(base_exp * 0.3) if premium_active else 0
+            bonus_money = int(base_money * 0.5) if premium_active else 0
+
+            total_exp = base_exp + bonus_exp
+            total_money = base_money + bonus_money
+
+            # Обновляем деньги и опыт
             user_data = supabase.table("users").select("money").eq("user_id", user_id).execute()
             current_money = user_data.data[0]["money"] if user_data.data else 0
-            await add_experience(user_id, exp)
+
+            await add_experience(user_id, total_exp)
+
             supabase.table("users").update({
-                "money": current_money + money
+                "money": current_money + total_money
             }).eq("user_id", user_id).execute()
 
             # Удаляем статус приключения
@@ -1161,7 +1335,6 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                 item_dropped = item
                 rarity_type = "сильный"
 
-            # Сообщаем о предмете и кладём в инвентарь, если есть дроп
             if item_dropped:
                 item_name = item_dropped["name"]
                 await bot.send_message(
@@ -1183,14 +1356,17 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                         "count": 1
                     }).execute()
 
-            # Финальное сообщение о завершении приключения
+            # Финальное сообщение
+            exp_text = f"{base_exp}+{bonus_exp}({total_exp})" if premium_active else str(base_exp)
+            money_text = f"{base_money}+{bonus_money}({total_money})" if premium_active else str(base_money)
+
             await bot.send_message(
                 user_id,
                 f"✅ <b>Приключение завершено!</b>\n\n"
                 f"🏞️ Локация: <b>{location_name}</b>\n"
                 f"⚔️ Побежденный враг: <b>{mob}</b>\n\n"
-                f"🎖 Получено опыта: <b>{exp}</b>\n"
-                f"💰 Получено монет: <b>{money}</b>",
+                f"🎖 Получено опыта: <b>{exp_text}</b>\n"
+                f"💰 Получено монет: <b>{money_text}</b>",
                 reply_markup=main_menu_kb
             )
 
