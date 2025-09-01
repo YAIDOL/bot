@@ -312,6 +312,66 @@ async def handle_create_lot_start(message: types.Message):
     else:
         await message.answer("У вас нет предметов в рюкзаке.")
 
+@dp.message(lambda message: message.text == "❌ Убрать лот")
+async def handle_remove_lot_menu(message: types.Message):
+    await show_user_lots(message, page=1)
+
+ITEMS_PER_PAGE = 10  # можно изменить
+
+async def show_user_lots(message_or_callback, page: int = 1):
+    user_id = message_or_callback.from_user.id if hasattr(message_or_callback, "from_user") else message_or_callback.from_user.id
+    offset = (page - 1) * ITEMS_PER_PAGE
+
+    result = supabase.table("rynok") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .order("id", desc=False) \
+        .range(offset, offset + ITEMS_PER_PAGE - 1) \
+        .execute()
+
+    data = result.data
+    if not data:
+        await message_or_callback.answer("❗ У вас нет выставленных лотов.")
+        return
+
+    text = f"❌ <b>Выберите лот для удаления (стр. {page})</b>:\n\n"
+    for i, lot in enumerate(data, start=1 + offset):
+        text += f"{i}. <b>{lot['item_name']}</b> — {lot['cost']} монет\n"
+
+    # Инлайн кнопки
+    keyboard = []
+    row = []
+    for lot in data:
+        row.append(InlineKeyboardButton(
+            text=lot["item_name"],
+            callback_data=f"remove_lot_{lot['id']}"
+        ))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    # Кнопки пагинации
+    total = supabase.table("rynok").select("id", count="exact").eq("user_id", user_id).execute().count or 0
+    max_page = (total + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+
+    pagination_row = []
+    if page > 1:
+        pagination_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"user_lots_page_{page - 1}"))
+    if page < max_page:
+        pagination_row.append(InlineKeyboardButton(text="➡️ Далее", callback_data=f"user_lots_page_{page + 1}"))
+    if pagination_row:
+        keyboard.append(pagination_row)
+
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    if isinstance(message_or_callback, types.CallbackQuery):
+        await message_or_callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    else:
+        await message_or_callback.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
 # ----------EXP ---------
 
 async def add_experience(user_id: int, amount: int):
@@ -1195,6 +1255,69 @@ async def handle_messages(message: types.Message):
 
     elif text == "🏪 Рынок":
         await message.answer("🏪 Добро пожаловать на рынок! Выберите действие:", reply_markup=market_menu_kb)
+
+
+@dp.callback_query(lambda c: c.data.startswith("remove_lot_"))
+async def handle_remove_lot(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    lot_id = int(callback_query.data.split("_")[-1])
+
+    # Проверяем лот
+    result = supabase.table("rynok") \
+        .select("*") \
+        .eq("id", lot_id) \
+        .limit(1) \
+        .execute()
+
+    if not result.data:
+        await callback_query.answer("❗ Лот не найден.", show_alert=True)
+        return
+
+    lot = result.data[0]
+    if lot["user_id"] != user_id:
+        await callback_query.answer("❗ Это не ваш лот.", show_alert=True)
+        return
+
+    item_name = lot["item_name"]
+
+    # Возвращаем предмет в рюкзак
+    backpack = supabase.table("backpack") \
+        .select("count") \
+        .eq("user_id", user_id) \
+        .eq("item_name", item_name) \
+        .limit(1) \
+        .execute()
+
+    if backpack.data:
+        current_count = backpack.data[0]["count"]
+        supabase.table("backpack") \
+            .update({"count": current_count + 1}) \
+            .eq("user_id", user_id) \
+            .eq("item_name", item_name) \
+            .execute()
+    else:
+        supabase.table("backpack").insert({
+            "user_id": user_id,
+            "item_name": item_name,
+            "count": 1
+        }).execute()
+
+    # Удаляем лот с рынка
+    supabase.table("rynok") \
+        .delete() \
+        .eq("id", lot_id) \
+        .execute()
+
+    await callback_query.message.edit_text(
+        f"✅ Лот <b>{item_name}</b> удалён и возвращён в рюкзак.",
+        parse_mode="HTML"
+    )
+
+@dp.callback_query(lambda c: c.data.startswith("user_lots_page_"))
+async def paginate_user_lots(callback_query: types.CallbackQuery):
+    page = int(callback_query.data.split("_")[-1])
+    await show_user_lots(callback_query, page)
+
 
 @dp.callback_query(lambda c: c.data.startswith("buy_"))
 async def handle_buy(callback_query: types.CallbackQuery):
