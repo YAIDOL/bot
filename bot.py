@@ -5,7 +5,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.client.default import DefaultBotProperties
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -24,10 +24,20 @@ if not TOKEN or not SUPABASE_URL or not SUPABASE_KEY:
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+waiting_for_price = set()
+lot_creation_data = {}  # user_id: item_name
 
 waiting_for_nick = set()
 
 # ---------- Keyboards ----------
+market_menu_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🛒 Создать лот"), KeyboardButton(text="❌ Убрать лот")],
+        [KeyboardButton(text="⬅️ Назад (торговля)")]
+    ],
+    resize_keyboard=True
+)
+
 donate_shop_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="👑 Премиум")],
@@ -110,7 +120,136 @@ async def notify_users_on_start():
     # Тут можна зробити розсилку або інші дії
 
 
-# ----------EXP ----------
+ITEMS_PER_PAGE = 10
+
+async def create_paginated_inline_keyboard(user_id, items, supabase, page=0, category="все"):
+    backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
+
+    if not backpack_data.data:
+        return None
+
+    filtered_items = []
+    for item in backpack_data.data:
+        item_name = item['item_name']
+        item_count = item['count']
+
+        for category_name, category_data in items.items():
+            for set_item in category_data:
+                if set_item['name'] == item_name:
+                    if category == "все" or category_name == category:
+                        filtered_items.append((set_item, item_count))
+                    break
+
+    if not filtered_items:
+        return None
+
+    # Пагінація
+    start = page * ITEMS_PER_PAGE
+    end = start + ITEMS_PER_PAGE
+    paginated_items = filtered_items[start:end]
+
+    buttons = [
+        InlineKeyboardButton(
+            text=f"{item['name']} ({count})",
+            callback_data=f"create_lot:{item['name']}"
+        )
+        for item, count in paginated_items
+    ]
+
+    # Розкладка в 2 колонки
+    keyboard_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
+
+    # Кнопки пагінації
+    pagination_buttons = []
+    if page > 0:
+        pagination_buttons.append(
+            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"page:{page - 1}")
+        )
+    if end < len(filtered_items):
+        pagination_buttons.append(
+            InlineKeyboardButton(text="➡️ Далее", callback_data=f"page:{page + 1}")
+        )
+
+    if pagination_buttons:
+        keyboard_rows.append(pagination_buttons)
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+
+@dp.message(lambda message: message.from_user.id in waiting_for_price)
+async def handle_price_input(message: types.Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+
+    # Перевірка: тільки цифри
+    if not text.isdigit():
+        await message.answer("❗ Введите только число. Без букв, символов или пробелов.")
+        return
+
+    price = int(text)
+    item_name = lot_creation_data.get(user_id)
+
+    # ⬇️ Зменшити кількість предмета в backpack на 1
+    result = supabase.table("backpack") \
+        .select("count") \
+        .eq("user_id", user_id) \
+        .eq("item_name", item_name) \
+        .limit(1) \
+        .execute()
+
+    if not result.data:
+        await message.answer("❗ У вас нет такого предмета в рюкзаке.")
+        return
+
+    current_count = result.data[0]['count']
+    if current_count <= 0:
+        await message.answer("❗ Недостаточно количества предмета.")
+        return
+
+    # Якщо залишиться 0 — можна видалити рядок або залишити з 0
+    if current_count == 1:
+        supabase.table("backpack") \
+            .delete() \
+            .eq("user_id", user_id) \
+            .eq("item_name", item_name) \
+            .execute()
+    else:
+        supabase.table("backpack") \
+            .update({"count": current_count - 1}) \
+            .eq("user_id", user_id) \
+            .eq("item_name", item_name) \
+            .execute()
+
+    # 🛒 Додати лот у таблицю rynok
+    supabase.table("rynok").insert({
+        "user_id": user_id,
+        "item_name": item_name,
+        "cost": price
+    }).execute()
+
+    # ✅ Повідомлення
+    await message.answer(
+        f"✅ Лот на <b>{item_name}</b> создан с ценой <b>{price}</b> монет!\n"
+        f"📉 Из рюкзака списано 1 предмет.",
+        parse_mode="HTML"
+    )
+
+    # Очистити стан
+    waiting_for_price.remove(user_id)
+    lot_creation_data.pop(user_id, None)
+
+@dp.message(lambda message: message.text == "🛒 Создать лот")
+async def handle_create_lot_start(message: types.Message):
+    user_id = message.from_user.id
+    keyboard = await create_paginated_inline_keyboard(user_id, items, supabase, page=0)
+
+    if keyboard:
+        await message.answer("🎒 Выберите предмет для создания лота:", reply_markup=keyboard)
+    else:
+        await message.answer("У вас нет предметов в рюкзаке.")
+
+# ----------EXP ---------
+
 async def add_experience(user_id: int, amount: int):
     response = supabase.table("users").select("exp, level, level_points").eq("user_id", user_id).execute()
     if not response.data:
@@ -990,18 +1129,40 @@ async def handle_messages(message: types.Message):
     elif text == "⬅️ Назад (торговля)":
         await message.answer("Возвращаемся в раздел 'Торговля':", reply_markup=trade_menu_kb)
 
-
     elif text == "🏪 Рынок":
-        await message.answer("🏪 Здесь будет рынок.")
+        await message.answer("🏪 Добро пожаловать на рынок! Выберите действие:", reply_markup=market_menu_kb)
 
 
-from datetime import datetime, timedelta, timezone
+@dp.callback_query(lambda c: c.data.startswith("page:"))
+async def handle_pagination(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    page = int(callback_query.data.split(":")[1])
+
+    keyboard = await create_paginated_inline_keyboard(user_id, items, supabase, page=page)
+
+    if keyboard:
+        await callback_query.message.edit_reply_markup(reply_markup=keyboard)
+    else:
+        await callback_query.answer("Ошибка загрузки страницы.")
+
+
+@dp.callback_query(lambda c: c.data.startswith("create_lot:"))
+async def process_create_lot_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    item_name = callback_query.data.split(":")[1]
+
+    # Зберігаємо очікування ціни
+    waiting_for_price.add(user_id)
+    lot_creation_data[user_id] = item_name
+
+    await callback_query.message.answer(f"📦 Вы выбрали предмет: <b>{item_name}</b>\n💰 Введите цену (только цифры):", parse_mode="HTML")
+
+
 
 @dp.callback_query(lambda c: c.data == "buy_premium")
 async def buy_premium_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
 
-    # Получаем пользователя
     result = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
     user = result.data
 
@@ -1046,7 +1207,7 @@ async def buy_premium_callback(callback_query: types.CallbackQuery):
 
     await callback_query.message.edit_text(message_text)
 
-    
+
 @dp.callback_query(lambda c: c.data.startswith("equip_"))
 async def handle_item_selection(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
