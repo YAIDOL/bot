@@ -176,6 +176,62 @@ async def create_paginated_inline_keyboard(user_id, items, supabase, page=0, cat
     return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
 
+
+ITEMS_PER_PAGE = 10
+
+async def show_market(message: types.Message, page: int = 1):
+    offset = (page - 1) * ITEMS_PER_PAGE
+
+    # Получаем лоты с БД
+    result = supabase.table("rynok") \
+        .select("*") \
+        .order("id", desc=False) \
+        .range(offset, offset + ITEMS_PER_PAGE - 1) \
+        .execute()
+
+    data = result.data
+    if not data:
+        await message.answer("❗ Рынок пуст.")
+        return
+
+    # Формируем текст
+    market_text = f"🏪 <b>Лоты на рынке (стр. {page})</b>:\n\n"
+    for i, lot in enumerate(data, start=1 + offset):
+        market_text += f"{i}. <b>{lot['item_name']}</b> — {lot['cost']} монет\n"
+
+    # === Кнопки с предметами ===
+    item_buttons = []
+    row = []
+    for i, lot in enumerate(data):
+        button = InlineKeyboardButton(
+            text=lot['item_name'],
+            callback_data=f"buy_{lot['id']}"  # Привязываем к id лота для покупки
+        )
+        row.append(button)
+        if len(row) == 2:
+            item_buttons.append(row)
+            row = []
+    if row:
+        item_buttons.append(row)
+
+    # === Кнопки пагинации ===
+    total_lots = supabase.table("rynok").select("id", count="exact").execute().count or 0
+    max_page = (total_lots + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+
+    pagination_buttons = []
+    if page > 1:
+        pagination_buttons.append(InlineKeyboardButton(text="⏪ Назад", callback_data=f"market_page_{page - 1}"))
+    if page < max_page:
+        pagination_buttons.append(InlineKeyboardButton(text="⏩ Далее", callback_data=f"market_page_{page + 1}"))
+
+    if pagination_buttons:
+        item_buttons.append(pagination_buttons)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=item_buttons)
+
+    await message.answer(market_text, parse_mode="HTML", reply_markup=keyboard)
+
+
 @dp.message(lambda message: message.from_user.id in waiting_for_price)
 async def handle_price_input(message: types.Message):
     user_id = message.from_user.id
@@ -199,6 +255,8 @@ async def handle_price_input(message: types.Message):
 
     if not result.data:
         await message.answer("❗ У вас нет такого предмета в рюкзаке.")
+        waiting_for_price.remove(user_id)
+        lot_creation_data.pop(user_id, None)
         return
 
     current_count = result.data[0]['count']
@@ -237,6 +295,12 @@ async def handle_price_input(message: types.Message):
     # Очистити стан
     waiting_for_price.remove(user_id)
     lot_creation_data.pop(user_id, None)
+
+@dp.message(lambda message: message.text == "🏪 Рынок")
+async def handle_market_button(message: types.Message):
+    await message.answer("🏪 Добро пожаловать на рынок! Выберите действие:", reply_markup=market_menu_kb)
+    await show_market(message, page=1)
+
 
 @dp.message(lambda message: message.text == "🛒 Создать лот")
 async def handle_create_lot_start(message: types.Message):
@@ -1131,6 +1195,119 @@ async def handle_messages(message: types.Message):
 
     elif text == "🏪 Рынок":
         await message.answer("🏪 Добро пожаловать на рынок! Выберите действие:", reply_markup=market_menu_kb)
+
+@dp.callback_query(lambda c: c.data.startswith("buy_"))
+async def handle_buy(callback_query: types.CallbackQuery):
+    buyer_id = callback_query.from_user.id
+    lot_id = int(callback_query.data.split("_")[1])
+
+    # 1. Получаем лот из рынка
+    result = supabase.table("rynok") \
+        .select("*") \
+        .eq("id", lot_id) \
+        .limit(1) \
+        .execute()
+
+    if not result.data:
+        await callback_query.answer("❗ Лот не найден.", show_alert=True)
+        return
+
+    lot = result.data[0]
+    item_name = lot["item_name"]
+    cost = lot["cost"]
+    seller_id = lot["user_id"]
+
+    if seller_id == buyer_id:
+        await callback_query.answer("❗ Нельзя покупать свой лот.", show_alert=True)
+        return
+
+    # 2. Получаем покупателя
+    buyer_data = supabase.table("users") \
+        .select("money") \
+        .eq("user_id", buyer_id) \
+        .limit(1) \
+        .execute()
+
+    if not buyer_data.data:
+        await callback_query.answer("❗ Вы не зарегистрированы.", show_alert=True)
+        return
+
+    buyer_money = buyer_data.data[0]["money"]
+
+    if buyer_money < cost:
+        await callback_query.answer("❗ Недостаточно монет.", show_alert=True)
+        return
+
+    # 3. Списываем монеты у покупателя
+    supabase.table("users") \
+        .update({"money": buyer_money - cost}) \
+        .eq("user_id", buyer_id) \
+        .execute()
+
+    # 4. Добавляем предмет покупателю в backpack
+    backpack_check = supabase.table("backpack") \
+        .select("count") \
+        .eq("user_id", buyer_id) \
+        .eq("item_name", item_name) \
+        .limit(1) \
+        .execute()
+
+    if backpack_check.data:
+        current_count = backpack_check.data[0]["count"]
+        supabase.table("backpack") \
+            .update({"count": current_count + 1}) \
+            .eq("user_id", buyer_id) \
+            .eq("item_name", item_name) \
+            .execute()
+    else:
+        supabase.table("backpack").insert({
+            "user_id": buyer_id,
+            "item_name": item_name,
+            "count": 1
+        }).execute()
+
+    # 5. Добавляем деньги продавцу
+    seller_data = supabase.table("users") \
+        .select("money") \
+        .eq("user_id", seller_id) \
+        .limit(1) \
+        .execute()
+
+    if seller_data.data:
+        seller_money = seller_data.data[0]["money"]
+        supabase.table("users") \
+            .update({"money": seller_money + cost}) \
+            .eq("user_id", seller_id) \
+            .execute()
+
+    # 6. Удаляем лот с рынка
+    supabase.table("rynok") \
+        .delete() \
+        .eq("id", lot_id) \
+        .execute()
+
+    # 7. Уведомление покупателю
+    await callback_query.message.edit_text(
+        f"✅ Вы купили <b>{item_name}</b> за <b>{cost}</b> монет.",
+        parse_mode="HTML"
+    )
+
+    # 8. Уведомление продавцу
+    try:
+        await bot.send_message(
+            seller_id,
+            f"💰 Ваш лот <b>{item_name}</b> был куплен за <b>{cost}</b> монет!",
+            parse_mode="HTML"
+        )
+    except:
+        pass
+
+@dp.callback_query(lambda c: c.data.startswith("market_page_"))
+async def handle_market_pagination(callback_query: types.CallbackQuery):
+    page = int(callback_query.data.split("_")[-1])
+    await callback_query.message.delete()  # Удалить старое сообщение
+    await show_market(callback_query.message, page=page)
+    await callback_query.answer()
 
 
 @dp.callback_query(lambda c: c.data.startswith("page:"))
