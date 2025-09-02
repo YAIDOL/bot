@@ -30,6 +30,14 @@ lot_creation_data = {}  # user_id: item_name
 waiting_for_nick = set()
 
 # ---------- Keyboards ----------
+arena_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🔍 Начать поиск противника")],
+        [KeyboardButton(text="⬅️ Главная")],
+    ],
+    resize_keyboard=True
+)
+
 market_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🛒 Создать лот"), KeyboardButton(text="❌ Убрать лот")],
@@ -40,7 +48,7 @@ market_menu_kb = ReplyKeyboardMarkup(
 
 donate_shop_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="👑 Премиум")],
+        [KeyboardButton(text="👑 Премиум"), KeyboardButton(text="💎 Алмазы")],
         [KeyboardButton(text="⬅️ Назад (торговля)")]
     ],
     resize_keyboard=True
@@ -58,6 +66,7 @@ main_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🗺️ Приключения"), KeyboardButton(text="⚒️ Кузница")],
         [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="💪 Мой клан"), KeyboardButton(text="🏆 Топ"), KeyboardButton(text="🛍️ Торговля")],
+        [KeyboardButton(text="⚔️ Арена"), KeyboardButton(text="🛡️ Клановая битва")],
     ],
     resize_keyboard=True
 )
@@ -1068,7 +1077,10 @@ async def handle_messages(message: types.Message):
                 f"🌟 Уровень: {row['level']}\n"
                 f"Опыт: {row['exp']} / {row['exp_max']}\n"
                 f"Очки прокачки: {row.get('level_points', 0)}\n"
-                f"❤️{row['health']} | 🗡{row['attack']}\n\n"
+                f"❤️ {row['health']} | 🗡 {row['attack']}\n"
+                f"🌀 Уклонение: {row.get('dodge', 0)}%\n"
+                f"🎯 Крит: {row.get('crit', 0)}%\n"
+                f"🔁 Контратака: {row.get('counter_attack', 0)}%\n\n"
                 f"💰 Деньги: {row['money']} | 💎 Алмазы: {row['diamonds']}\n\n"
                 f"🥋 Экипировка:\n"
                 f"Голова: {row['head']}\n"
@@ -1100,18 +1112,22 @@ async def handle_messages(message: types.Message):
         # Возвращаем в рюкзак
         await message.answer("Ваши вещи в рюкзаке:", reply_markup=backpack_action_kb)
 
+
     elif text == "⚙️ Прокачка":
         upgrade_kb = ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="❤️ Здоровье"), KeyboardButton(text="🗡️ Урон")],
+                [KeyboardButton(text="🌀 Уклонение"), KeyboardButton(text="🎯 Крит"),
+                 KeyboardButton(text="🔁 Контратака")],
                 [KeyboardButton(text="⬅️ Назад ")]
             ],
             resize_keyboard=True
         )
-        await message.answer("Выберите, что прокачать:", reply_markup=upgrade_kb)
 
-    elif text in ("❤️ Здоровье", "🗡️ Урон"):
-        resp = supabase.table("users").select("level_points", "health", "attack").eq("user_id", user_id).execute()
+        await message.answer("Выберите, что прокачать:", reply_markup=upgrade_kb)
+    elif text in ("❤️ Здоровье", "🗡️ Урон", "🌀 Уклонение", "🎯 Крит", "🔁 Контратака"):
+        resp = supabase.table("users").select("level_points", "health", "attack", "dodge", "crit", "counter_attack").eq(
+            "user_id", user_id).execute()
         if not resp.data:
             return
         user = resp.data[0]
@@ -1121,27 +1137,60 @@ async def handle_messages(message: types.Message):
             return
         new_points = points - 1
         updates = {"level_points": new_points}
+        msg = ""
         if text == "❤️ Здоровье":
             updates["health"] = user["health"] + 10
-            await message.answer("❤️ <b>Здоровье +10!</b>\nВы стали крепче и выносливее.")
-        else:  # "🗡️ Урон"
+            msg = "❤️ <b>Здоровье +10!</b>\nВы стали крепче и выносливее."
+        elif text == "🗡️ Урон":
             updates["attack"] = user["attack"] + 10
-            await message.answer("🗡️ <b>Атака +10!</b>\nТвоя сила увеличилась!")
+            msg = "🗡️ <b>Атака +10!</b>\nТвоя сила увеличилась!"
+        elif text == "🌀 Уклонение":
+            if user["dodge"] >= 30:
+                await message.answer("❗ Уклонение уже на максимуме (30%).")
+                return
+            updates["dodge"] = min(user["dodge"] + 2, 30)
+            msg = f"🌀 <b>Уклонение +2%</b>\nТеперь вы уворачиваетесь чаще!"
+        elif text == "🎯 Крит":
+            if user["crit"] >= 40:
+                await message.answer("❗ Крит уже на максимуме (40%).")
+                return
+            updates["crit"] = min(user["crit"] + 2, 40)
+            msg = f"🎯 <b>Крит +2%</b>\nТы стал наносить больше критических ударов!"
+        elif text == "🔁 Контратака":
+            if user["counter_attack"] >= 30:
+                await message.answer("❗ Контратака уже на максимуме (30%).")
+                return
+            updates["counter_attack"] = min(user["counter_attack"] + 2, 30)
+            msg = f"🔁 <b>Контратака +2%</b>\nТы научился отвечать на удары противника!"
         supabase.table("users").update(updates).eq("user_id", user_id).execute()
-        updated = supabase.table("users").select("level_points", "health", "attack").eq("user_id", user_id).execute()
+        updated = supabase.table("users").select("level_points", "health", "attack", "dodge", "crit",
+                                                 "counter_attack").eq("user_id", user_id).execute()
         new_user = updated.data[0]
+
+        await message.answer(msg)
         await message.answer(
             f"🧬 <b>Текущие характеристики:</b>\n"
             f"❤️ Здоровье: <b>{new_user['health']}</b>\n"
             f"🗡️ Урон: <b>{new_user['attack']}</b>\n"
+            f"🌀 Уклонение: <b>{new_user['dodge']}%</b>\n"
+            f"🎯 Крит: <b>{new_user['crit']}%</b>\n"
+            f"🔁 Контратака: <b>{new_user['counter_attack']}%</b>\n"
             f"🎯 Очки прокачки: <b>{new_user['level_points']}</b>"
         )
+
 
     elif text == "⬅️Назад":
         await message.answer("Главное меню:", reply_markup=profile_kb)
 
     elif text == "⬅️ Главная":
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
+
+    elif text == "⚔️ Арена":
+        await message.answer("Добро пожаловать на арену! Выберите действие:", reply_markup=arena_kb)
+
+    elif text == "🔍 Начать поиск противника":
+        await message.answer("🔧 В разработке... Подбор противника скоро будет доступен.")
+
 
 
     elif text == "🗺️ Приключения":
@@ -1230,23 +1279,37 @@ async def handle_messages(message: types.Message):
     elif text == "💎 Донат Магазин":
         await message.answer("💎 Донат-магазин:\nВыберите категорию:", reply_markup=donate_shop_kb)
 
+
     elif text == "👑 Премиум":
         premium_text = (
             "👑 *Премиум-аккаунт*\n\n"
-            "💰 Стоимость: 5к\n"
+            "💎 Стоимость: 100 алмазов\n"
             "🕘 Длительность: 7 дней\n"
             "📈 +30% опыта\n"
             "💰 +50% денег\n"
             "🍀 +10% удачи\n\n"
             "Получите преимущества уже сейчас!"
         )
-
-        # Инлайн-кнопка
         buy_premium_kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="💳 Купить Премиум", callback_data="buy_premium")]
             ]
         )
+        await message.answer(premium_text, reply_markup=buy_premium_kb, parse_mode="Markdown")
+
+    elif text == "💎 Алмазы":
+        diamonds_text = (
+            "💎 *Покупка алмазов*\n\n"
+            "💰 Стоимость: 5,000 денег\n"
+            "📦 Количество: 100 алмазов\n\n"
+            "Нажмите кнопку ниже, чтобы купить."
+        )
+        buy_diamonds_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="💳 Купить 100 алмазов", callback_data="buy_diamonds")]
+            ]
+        )
+        await message.answer(diamonds_text, reply_markup=buy_diamonds_kb, parse_mode="Markdown")
 
         await message.answer(premium_text, reply_markup=buy_premium_kb, parse_mode="Markdown")
 
@@ -1312,6 +1375,83 @@ async def handle_remove_lot(callback_query: types.CallbackQuery):
         f"✅ Лот <b>{item_name}</b> удалён и возвращён в рюкзак.",
         parse_mode="HTML"
     )
+@dp.callback_query(lambda c: c.data == "buy_diamonds")
+async def buy_diamonds_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+
+    result = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
+    user = result.data
+
+    if not user:
+        await callback_query.message.edit_text("❌ Пользователь не найден в базе данных.")
+        return
+
+    money = user.get("money", 0)
+
+    if money < 5000:
+        await callback_query.message.edit_text("❌ Недостаточно денег для покупки алмазов.")
+        return
+
+    diamonds = user.get("diamonds", 0)
+
+    # Обновляем пользователя в базе
+    supabase.table("users").update({
+        "money": money - 5000,
+        "diamonds": diamonds + 100
+    }).eq("user_id", user_id).execute()
+
+    await callback_query.message.edit_text("✅ Вы успешно приобрели 100 алмазов за 5,000 денег.")
+
+
+@dp.callback_query(lambda c: c.data == "buy_premium")
+async def buy_premium_callback(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+
+    result = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
+    user = result.data
+
+    if not user:
+        await callback_query.message.edit_text("❌ Пользователь не найден в базе данных.")
+        return
+
+    diamonds = user.get("diamonds", 0)
+
+    if diamonds < 100:
+        await callback_query.message.edit_text("❌ Недостаточно средств для покупки премиума.")
+        return
+
+    now = datetime.now(timezone.utc)
+    premium_until_str = user.get("premium_until")
+    premium_until = None
+
+    if premium_until_str:
+        try:
+            premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
+        except Exception:
+            premium_until = None
+
+    if premium_until and premium_until > now:
+        # Продлеваем премиум на 7 дней с текущей даты premium_until
+        new_premium_until = premium_until + timedelta(days=7)
+        message_text = "✅ К вашему сроку добавлено 7 дней премиума!"
+    else:
+        # Активируем премиум на 7 дней с текущего времени
+        new_premium_until = now + timedelta(days=7)
+        message_text = "🎉 Премиум успешно активирован на 7 дней!"
+
+    # Форматируем дату в ISO с 'Z'
+    new_premium_until_iso = new_premium_until.isoformat(timespec='seconds').replace('+00:00', 'Z')
+
+    # Обновляем пользователя в базе
+    supabase.table("users").update({
+        "diamonds": diamonds - 100,
+        "premium": True,
+        "premium_until": new_premium_until_iso
+    }).eq("user_id", user_id).execute()
+
+    await callback_query.message.edit_text(message_text)
+
+
 
 @dp.callback_query(lambda c: c.data.startswith("user_lots_page_"))
 async def paginate_user_lots(callback_query: types.CallbackQuery):
@@ -1459,53 +1599,6 @@ async def process_create_lot_callback(callback_query: types.CallbackQuery):
 
 
 
-@dp.callback_query(lambda c: c.data == "buy_premium")
-async def buy_premium_callback(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-
-    result = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
-    user = result.data
-
-    if not user:
-        await callback_query.message.edit_text("❌ Пользователь не найден в базе данных.")
-        return
-
-    money = user.get("money", 0)
-
-    if money < 5000:
-        await callback_query.message.edit_text("❌ Недостаточно средств для покупки премиума.")
-        return
-
-    now = datetime.now(timezone.utc)
-    premium_until_str = user.get("premium_until")
-    premium_until = None
-
-    if premium_until_str:
-        try:
-            premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
-        except Exception:
-            premium_until = None
-
-    if premium_until and premium_until > now:
-        # Продлеваем премиум на 7 дней с текущей даты premium_until
-        new_premium_until = premium_until + timedelta(days=7)
-        message_text = "✅ К вашему сроку добавлено 7 дней премиума!"
-    else:
-        # Активируем премиум на 7 дней с текущего времени
-        new_premium_until = now + timedelta(days=7)
-        message_text = "🎉 Премиум успешно активирован на 7 дней!"
-
-    # Форматируем дату в ISO с 'Z'
-    new_premium_until_iso = new_premium_until.isoformat(timespec='seconds').replace('+00:00', 'Z')
-
-    # Обновляем пользователя в базе
-    supabase.table("users").update({
-        "money": money - 5000,
-        "premium": True,
-        "premium_until": new_premium_until_iso
-    }).eq("user_id", user_id).execute()
-
-    await callback_query.message.edit_text(message_text)
 
 
 @dp.callback_query(lambda c: c.data.startswith("equip_"))
