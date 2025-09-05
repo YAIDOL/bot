@@ -1279,20 +1279,20 @@ async def handle_messages(message: types.Message):
             if user["dodge"] >= 20:
                 await message.answer("❗ Уклонение уже на максимуме (20%).")
                 return
-            updates["dodge"] = min(user["dodge"] + 1, 20)
-            msg = f"🌀 <b>Уклонение +1%</b>\nТеперь вы уворачиваетесь чаще!"
+            updates["dodge"] = min(user["dodge"] + 2, 20)
+            msg = f"🌀 <b>Уклонение +2%</b>\nТеперь вы уворачиваетесь чаще!"
         elif text == "🎯 Крит":
             if user["crit"] >= 30:
                 await message.answer("❗ Крит уже на максимуме (30%).")
                 return
-            updates["crit"] = min(user["crit"] + 1, 30)
-            msg = f"🎯 <b>Крит +1%</b>\nТы стал наносить больше критических ударов!"
+            updates["crit"] = min(user["crit"] + 2, 30)
+            msg = f"🎯 <b>Крит +2%</b>\nТы стал наносить больше критических ударов!"
         elif text == "🔁 Контратака":
-            if user["counter_attack"] >= 25:
-                await message.answer("❗ Контратака уже на максимуме (25%).")
+            if user["counter_attack"] >= 20:
+                await message.answer("❗ Контратака уже на максимуме (20%).")
                 return
-            updates["counter_attack"] = min(user["counter_attack"] + 1, 25)
-            msg = f"🔁 <b>Контратака +1%</b>\nТы научился отвечать на удары противника!"
+            updates["counter_attack"] = min(user["counter_attack"] + 2, 20)
+            msg = f"🔁 <b>Контратака +2%</b>\nТы научился отвечать на удары противника!"
 
         supabase.table("users").update(updates).eq("user_id", user_id).execute()
 
