@@ -2,6 +2,7 @@ import os
 import asyncio
 import re
 import random
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -79,10 +80,12 @@ main_menu_kb = ReplyKeyboardMarkup(
 top_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🌟 Топ по уровню"), KeyboardButton(text="💰 Топ по деньгам")],
+        [KeyboardButton(text="⚔️ Топ по PvP победам")],
         [KeyboardButton(text="⬅️ Главная")],
     ],
     resize_keyboard=True
 )
+
 
 forge_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -96,19 +99,18 @@ forge_menu_kb = ReplyKeyboardMarkup(
 profile_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🎒 Рюкзак"), KeyboardButton(text="⚙️ Прокачка")],
+        [KeyboardButton(text="⚔️ Надеть"), KeyboardButton(text="❌ Снять")],
         [KeyboardButton(text="⬅️ Главная")]
     ],
     resize_keyboard=True
 )
 
-# Створимо клавіатуру для предметів
-backpack_action_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="⚔️ Надеть"), KeyboardButton(text="❌ Снять")],
-        [KeyboardButton(text="⬅️Назад")]
-    ],
-    resize_keyboard=True
-)
+backpack_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="🪖 Голова", callback_data="slot_head"), InlineKeyboardButton(text="👕 Тело", callback_data="slot_body")],
+    [InlineKeyboardButton(text="🧤 Руки", callback_data="slot_gloves"), InlineKeyboardButton(text="👖 Ноги", callback_data="slot_legs")],
+    [InlineKeyboardButton(text="🥾 Ступни", callback_data="slot_feet"),InlineKeyboardButton(text="🗡 Оружие", callback_data="slot_weapon")],
+
+])
 
 # Создание клавиатуры для выбора экипировки
 equip_kb = ReplyKeyboardMarkup(
@@ -410,20 +412,27 @@ async def add_experience(user_id: int, amount: int):
         level_ups += 1
         exp_max = level * 100
 
-    # Оновлення рівня, досвіду та очок прокачки
+    # Если уровень больше 75, очки прокачки не даём
+    if level > 75:
+        level_points_to_add = 0
+    else:
+        level_points_to_add = level_ups
+
+    # Обновление уровня, опыта и очков прокачки
     supabase.table("users").update({
         "exp": new_exp,
         "level": level,
         "exp_max": exp_max,
-        "level_points": level_points + level_ups
+        "level_points": level_points + level_points_to_add
     }).eq("user_id", user_id).execute()
 
     if level_ups > 0:
         await bot.send_message(
             user_id,
             f"🌟 <b>Поздравляем!</b> Вы достигли <b>{level} уровня</b>!\n"
-            f"🎉 Вы получили <b>{level_ups}</b> очко прокачки!"
+            f"🎉 Вы получили <b>{level_points_to_add}</b> очков прокачки!"
         )
+
 
 
 # Функція для створення інлайн клавіатури, що показує тільки ті предмети, які є в рюкзаку
@@ -473,6 +482,27 @@ def get_item_stats(item_name):
                 if item["name"] == item_name:
                     return item["hp"], item["damage"]
     return 0, 0
+
+
+def build_pvp_message(player, opponent):
+    return (
+        f"👤 Вы: {player['username']}\n"
+        f"❤️ Здоровье: {player['health']}\n"
+        f"⚔️ Атака: {player['attack']}\n"
+        f"🛡️ Уклонение: {player['dodge']}\n"
+        f"💥 Крит: {player['crit']}\n"
+        f"🔁 Контратака: {player['counter_attack']}\n\n"
+
+        f"🎯 Противник: {opponent['username']}\n"
+        f"❤️ Здоровье: {opponent['health']}\n"
+        f"⚔️ Атака: {opponent['attack']}\n"
+        f"🛡️ Уклонение: {opponent['dodge']}\n"
+        f"💥 Крит: {opponent['crit']}\n"
+        f"🔁 Контратака: {opponent['counter_attack']}"
+    )
+
+
+
 # ---------- Clans ----------
 CLANS = {
     "Звездные стражи 🌌": "🛡 <b>Звездные стражи</b> — это древнее и неуловимое братство, чья связь с космосом и тайнами вселенной глубока и неразрывна. Они — вечные наблюдатели, хранители небесного порядка и защитники миров от угроз, исходящих из бездны космоса. Их взгляд устремлен к звездам, а сердца бьются в ритме галактических циклов.",
@@ -736,6 +766,29 @@ MONSTERS = {
 }
 
 
+def get_items_by_slot(slot: str):
+    valid_slots = ["head", "body", "gloves", "legs", "feet", "weapon"]
+    if slot not in valid_slots:
+        raise ValueError(f"Invalid slot name: {slot}")
+
+    slot_items = {
+        "head": [],
+        "body": [],
+        "gloves": [],
+        "legs": [],
+        "feet": [],
+        "weapon": []
+    }
+
+    for power_type in SETS.values():
+        for set_name, set_data in power_type.items():
+            for item in set_data["items"]:
+                if slot in item:
+                    slot_items[slot].append(item)
+
+    return slot_items[slot]
+
+
 DROP_CHANCES = {
     "common": {"weak": 0.15, "strong": 0.05},
     "rare": {"weak": 0.20, "strong": 0.10},
@@ -811,6 +864,11 @@ def get_pvp_keyboard():
     ])
 
 # ---------- Clan selection ----------
+def get_user_backpack(user_id: int, supabase: Client):
+    response = supabase.table("backpack").select("*").eq("user_id", user_id).execute()
+    return response.data if response.data else []
+
+
 async def ask_clan_choice(message: types.Message):
     buttons = [[InlineKeyboardButton(text=clan, callback_data=f"clan_{clan.split()[0]}")] for clan in CLANS.keys()]
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -838,15 +896,17 @@ async def start_pvp_search(message: Message):
             await message.answer("❗ Вы не можете начать PvP сейчас.")
             return
 
-    # Получаем характеристики из таблицы users
-    user_data = supabase.table("users").select("health, attack, dodge, crit, counter_attack").eq("user_id", user_id).execute()
-    if not user_data.data:
+    # Получаем характеристики и имя пользователя
+    user_response = supabase.table("users").select("username, health, attack, dodge, crit, counter_attack").eq("user_id", user_id).execute()
+
+    if not user_response.data:
         await message.answer("⚠️ Не удалось получить ваши характеристики.")
         return
 
-    stats = user_data.data[0]
+    user_data = user_response.data[0]
+    username = user_data["username"]
 
-    # Ищем соперника в очереди
+    # Ищем соперника
     opponent_search = supabase.table("adventure_status") \
         .select("user_id") \
         .eq("pvp", True) \
@@ -859,26 +919,27 @@ async def start_pvp_search(message: Message):
 
         # Обновляем обоих игроков — создаем бой
         for uid, opp_id in [(user_id, opponent_id), (opponent_id, user_id)]:
-            # Получаем характеристики для каждого
-            user_stats = supabase.table("users").select("health, attack, dodge, crit, counter_attack").eq("user_id", uid).execute().data[0]
+            player_data = supabase.table("users").select("username, health, attack, dodge, crit, counter_attack").eq("user_id", uid).execute().data[0]
 
             supabase.table("adventure_status").upsert({
                 "user_id": uid,
+                "username": player_data["username"],
                 "pvp": True,
                 "opponent_id": opp_id,
                 "pvp_turn": 0,
                 "last_action": None,
-                **user_stats  # переносим характеристики
+                "health": player_data["health"],
+                "attack": player_data["attack"],
+                "dodge": player_data["dodge"],
+                "crit": player_data["crit"],
+                "counter_attack": player_data["counter_attack"]
             }).execute()
 
-        # Получаем информацию о никнеймах и боевой статистике
-        user_info = supabase.table("users").select("username, health, attack").eq("user_id", user_id).execute()
-        opp_info = supabase.table("users").select("username, health, attack").eq("user_id", opponent_id).execute()
+        # Получаем полную информацию о игроках
+        user_info = supabase.table("users").select("username, health, attack, dodge, crit, counter_attack").eq("user_id", user_id).execute().data[0]
+        opp_info = supabase.table("users").select("username, health, attack, dodge, crit, counter_attack").eq("user_id", opponent_id).execute().data[0]
 
-        user_stats = user_info.data[0]
-        opp_stats = opp_info.data[0]
-
-        # Сообщение
+        # Кнопки PvP
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text="🗡️ Ударить", callback_data="pvp_attack"),
@@ -889,25 +950,30 @@ async def start_pvp_search(message: Message):
             ]
         ])
 
-        await bot.send_message(user_id, build_pvp_message(user_stats, opp_stats), reply_markup=keyboard)
-        await bot.send_message(opponent_id, build_pvp_message(opp_stats, user_stats), reply_markup=keyboard)
+        await bot.send_message(user_id, build_pvp_message(user_info, opp_info), reply_markup=keyboard)
+        await bot.send_message(opponent_id, build_pvp_message(opp_info, user_info), reply_markup=keyboard)
 
     else:
-        # Никого не найдено — добавляем в очередь и сохраняем характеристики
+        # Никого не найдено — добавляем в очередь
         supabase.table("adventure_status").upsert({
             "user_id": user_id,
-            "username": user_data["username"],  # <== добавляем!
+            "username": username,
             "pvp": True,
             "opponent_id": None,
             "pvp_turn": 0,
             "last_action": None,
-            **stats  # переносим health, attack, dodge, crit, counter_attack
+            "health": user_data["health"],
+            "attack": user_data["attack"],
+            "dodge": user_data["dodge"],
+            "crit": user_data["crit"],
+            "counter_attack": user_data["counter_attack"]
         }).execute()
 
         await message.answer(
             "🔍 Вы начали поиск противника. Ожидание соперника...",
             reply_markup=cancel_search_kb
         )
+
 
 # Обробник натискання кнопок з категоріями
 @dp.message(lambda message: message.text in ["🪖 Голова", "👕 Тело", "🧤 Руки", "👖 Ноги", "👟 Ступни", "🗡️ Оружие"])
@@ -1105,60 +1171,6 @@ async def handle_messages(message: types.Message):
         await ask_clan_choice(message)
         return
 
-    async def show_backpack(message: types.Message):
-        user_id = message.from_user.id  # Получаем ID пользователя
-
-        # Получаем данные о рюкзаке из таблицы backpack в Supabase
-        backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
-
-        if backpack_data.data:
-            items_message = "Ваши вещи в рюкзаке:\n\n"
-
-            for item in backpack_data.data:
-                item_name = item['item_name']
-                item_count = item['count']
-
-                # Ищем предмет в Sets, чтобы получить его характеристики (HP и урон)
-                item_info = None
-                item_category = None
-                for category_name, category_data in SETS.items():
-                    for set_name, set_data in category_data.items():
-                        for set_item in set_data['items']:
-                            if set_item['name'] == item_name:
-                                item_info = set_item
-                                item_category = category_name
-                                break
-                    if item_info:
-                        break
-
-                if item_info:
-                    item_hp = item_info['hp']
-                    item_damage = item_info['damage']
-
-                    # Определяем смайлик в зависимости от категории
-                    category_emoji = "💪" if item_category == "strong" else "🐣"
-
-                    # Формируем сообщение для каждого предмета
-                    item_message = f"{category_emoji} {item_name}:\n"
-
-                    # Если HP больше 0, выводим сердечки и количество HP
-                    if item_hp > 0:
-                        item_message += f"{item_hp} ❤️\n"
-
-                    # Если урон больше 0, выводим мечи и количество урона
-                    if item_damage > 0:
-                        item_message += f"{item_damage} ⚔️\n"
-
-                    item_message += f"Количество: {item_count} шт.\n\n"
-
-                    items_message += item_message
-                else:
-                    items_message += f"{item_name} (Неизвестные характеристики)\nКоличество: {item_count} шт.\n\n"
-
-            # Отправляем сообщение с предметами и клавиатурой
-            await message.answer(items_message, reply_markup=backpack_action_kb)
-        else:
-            await message.answer("У вас нет вещей в рюкзаке.", reply_markup=backpack_action_kb)
 
     # Основной блок обработки сообщений
 
@@ -1214,7 +1226,8 @@ async def handle_messages(message: types.Message):
             await message.answer("Никнейм не найден. Введите свой никнейм.")
 
     elif text == "🎒 Рюкзак":
-        await show_backpack(message)
+        await message.answer("🎒 Выберите слот:", reply_markup=backpack_keyboard)
+
 
     elif text == "⚔️ Надеть":
         # Показываем клавиатуру для выбора части тела
@@ -1226,7 +1239,7 @@ async def handle_messages(message: types.Message):
 
     elif text == "⬅️ Назад":
         # Возвращаем в рюкзак
-        await message.answer("Ваши вещи в рюкзаке:", reply_markup=backpack_action_kb)
+        await message.answer("Ваши вещи в рюкзаке:", reply_markup=profile_kb)
 
 
     elif text == "⚙️ Прокачка":
@@ -1251,9 +1264,11 @@ async def handle_messages(message: types.Message):
         if points <= 0:
             await message.answer("❗ У вас нет очков прокачки.", reply_markup=profile_kb)
             return
+
         new_points = points - 1
         updates = {"level_points": new_points}
         msg = ""
+
         if text == "❤️ Здоровье":
             updates["health"] = user["health"] + 10
             msg = "❤️ <b>Здоровье +10!</b>\nВы стали крепче и выносливее."
@@ -1261,39 +1276,38 @@ async def handle_messages(message: types.Message):
             updates["attack"] = user["attack"] + 10
             msg = "🗡️ <b>Атака +10!</b>\nТвоя сила увеличилась!"
         elif text == "🌀 Уклонение":
-            if user["dodge"] >= 30:
-                await message.answer("❗ Уклонение уже на максимуме (30%).")
+            if user["dodge"] >= 20:
+                await message.answer("❗ Уклонение уже на максимуме (20%).")
                 return
-            updates["dodge"] = min(user["dodge"] + 2, 30)
-            msg = f"🌀 <b>Уклонение +2%</b>\nТеперь вы уворачиваетесь чаще!"
+            updates["dodge"] = min(user["dodge"] + 1, 20)
+            msg = f"🌀 <b>Уклонение +1%</b>\nТеперь вы уворачиваетесь чаще!"
         elif text == "🎯 Крит":
-            if user["crit"] >= 40:
-                await message.answer("❗ Крит уже на максимуме (40%).")
+            if user["crit"] >= 30:
+                await message.answer("❗ Крит уже на максимуме (30%).")
                 return
-            updates["crit"] = min(user["crit"] + 2, 40)
-            msg = f"🎯 <b>Крит +2%</b>\nТы стал наносить больше критических ударов!"
+            updates["crit"] = min(user["crit"] + 1, 30)
+            msg = f"🎯 <b>Крит +1%</b>\nТы стал наносить больше критических ударов!"
         elif text == "🔁 Контратака":
-            if user["counter_attack"] >= 30:
-                await message.answer("❗ Контратака уже на максимуме (30%).")
+            if user["counter_attack"] >= 25:
+                await message.answer("❗ Контратака уже на максимуме (25%).")
                 return
-            updates["counter_attack"] = min(user["counter_attack"] + 2, 30)
-            msg = f"🔁 <b>Контратака +2%</b>\nТы научился отвечать на удары противника!"
+            updates["counter_attack"] = min(user["counter_attack"] + 1, 25)
+            msg = f"🔁 <b>Контратака +1%</b>\nТы научился отвечать на удары противника!"
+
         supabase.table("users").update(updates).eq("user_id", user_id).execute()
+
         updated = supabase.table("users").select("level_points", "health", "attack", "dodge", "crit",
                                                  "counter_attack").eq("user_id", user_id).execute()
         new_user = updated.data[0]
 
-        await message.answer(msg)
-        await message.answer(
-            f"🧬 <b>Текущие характеристики:</b>\n"
-            f"❤️ Здоровье: <b>{new_user['health']}</b>\n"
-            f"🗡️ Урон: <b>{new_user['attack']}</b>\n"
-            f"🌀 Уклонение: <b>{new_user['dodge']}%</b>\n"
-            f"🎯 Крит: <b>{new_user['crit']}%</b>\n"
-            f"🔁 Контратака: <b>{new_user['counter_attack']}%</b>\n"
-            f"🎯 Очки прокачки: <b>{new_user['level_points']}</b>"
-        )
-
+        await message.answer(f"{msg}\n\n"
+                             f"🧬 <b>Текущие характеристики:</b>\n"
+                             f"❤️ Здоровье: <b>{new_user['health']}</b>\n"
+                             f"🗡️ Урон: <b>{new_user['attack']}</b>\n"
+                             f"🌀 Уклонение: <b>{new_user['dodge']}%</b>\n"
+                             f"🎯 Крит: <b>{new_user['crit']}%</b>\n"
+                             f"🔁 Контратака: <b>{new_user['counter_attack']}%</b>\n"
+                             f"🎯 Очки прокачки: <b>{new_user['level_points']}</b>")
 
     elif text == "⬅️Назад":
         await message.answer("Главное меню:", reply_markup=profile_kb)
@@ -1367,6 +1381,19 @@ async def handle_messages(message: types.Message):
         place = next((i + 1 for i, p in enumerate(players) if p["user_id"] == user_id), None)
         await message.answer(f"💰 <b>Топ по деньгам:</b>\n\n{players_list}\n\n📍Твое место: {place}",
                              reply_markup=top_menu_kb)
+
+
+    elif text == "⚔️ Топ по PvP победам":
+        response = supabase.table("users").select("user_id, username, pvp_win").order("pvp_win", desc=True).execute()
+        players = response.data or []
+
+        filtered_players = [p for p in players if p.get("pvp_win") and p["pvp_win"] > 0]
+        top_10 = filtered_players[:10]
+        players_list = "\n".join(f"{i + 1}. {p['username']} ⚔️ {p['pvp_win']}" for i, p in enumerate(top_10))
+        place = next((i + 1 for i, p in enumerate(filtered_players) if p["user_id"] == user_id), None)
+        await message.answer(
+            f"⚔️ <b>Топ по PvP победам:</b>\n\n{players_list}\n\n📍Твое место: {place if place else '—'}",
+            reply_markup=top_menu_kb)
 
     elif text == "⬅️ Главная":
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
@@ -1698,6 +1725,49 @@ async def handle_pagination(callback_query: types.CallbackQuery):
     else:
         await callback_query.answer("Ошибка загрузки страницы.")
 
+@dp.callback_query(F.data.startswith("slot_"))
+async def handle_slot(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    slot = callback.data.replace("slot_", "")  # "head", "body", ...
+
+    items = get_user_backpack(user_id, supabase)
+    user_items = {item["item_name"]: item["count"] for item in items}
+
+    slot_items = get_items_by_slot(slot)  # Получаем список предметов для слота
+
+    slot_title = {
+        "head": "🪖 Голова",
+        "body": "👕 Тело",
+        "gloves": "🧤 Руки",
+        "legs": "👖 Ноги",
+        "feet": "🥾 Ступни",
+        "weapon": "🗡 Оружие"
+    }.get(slot, "Слот")
+
+    message_lines = [f"<b>{slot_title} — ваши предметы:</b>\n"]
+
+    found = False
+
+    for item in slot_items:
+        name = item["name"]
+        if name in user_items:
+            count = user_items[name]
+            hp = item.get("hp", 0)
+            dmg = item.get("damage", 0)
+            found = True
+            message_lines.append(
+                f"🔹 <b>{name}</b>\n"
+                f"    🩸 HP: <code>{hp}</code>\n"
+                f"    ⚔️ Урон: <code>{dmg}</code>\n"
+                f"    🎒 Количество: <code>{count}</code>\n"
+            )
+
+    if not found:
+        message_lines.append("❌ У вас нет предметов в этом слоте.")
+
+    await callback.message.edit_text("\n".join(message_lines), parse_mode="HTML", reply_markup=backpack_keyboard)
+
+
 
 @dp.callback_query(lambda c: c.data.startswith("create_lot:"))
 async def process_create_lot_callback(callback_query: types.CallbackQuery):
@@ -1710,142 +1780,260 @@ async def process_create_lot_callback(callback_query: types.CallbackQuery):
 
     await callback_query.message.answer(f"📦 Вы выбрали предмет: <b>{item_name}</b>\n💰 Введите цену (только цифры):", parse_mode="HTML")
 
-
-
 @dp.callback_query(lambda c: c.data == "pvp_cancel")
 async def leave_pvp(callback: types.CallbackQuery):
     user_id = str(callback.from_user.id)
 
-    # Перевіряємо статус гравця
-    status = supabase.table("adventure_status") \
+    # Проверяем статус игрока
+    status_res = supabase.table("adventure_status") \
         .select("*") \
         .eq("user_id", user_id) \
         .eq("pvp", True) \
         .execute()
 
-
-    if not status.data:
+    if not status_res.data:
         await callback.answer("❗ Вы сейчас не на арене.", show_alert=True)
         return
 
-    opponent_id = status.data[0].get("opponent_id")
+    status = status_res.data[0]
+    opponent_id = status.get("opponent_id")
 
-    # Якщо є суперник, надсилаємо повідомлення про перемогу/поразку
-    if opponent_id:
-        try:
-            await bot.send_message(user_id, "❌ Вы покинули арену. Вы проиграли.")
-            await bot.send_message(opponent_id, "🏆 Ваш соперник вышел из боя. Вы победили!")
-        except Exception as e:
-            print(f"Ошибка при отправке сообщений: {e}")
-
-        # Видаляємо статус у обох гравців
-        supabase.table("adventure_status").delete().or_(
-            f"user_id.eq.{user_id},user_id.eq.{opponent_id}"
-        ).execute()
-
-    else:
-        # Якщо суперника немає (наприклад, якщо він у черзі), просто видаляємо свій статус
+    if not opponent_id:
+        # Игрок в очереди, боёв нет — просто удаляем статус
         supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
-        await callback.message.edit_text("❌ Вы покинули арену.")
+        await callback.message.edit_text("❌ Вы покинули арену. Поиск отменён.")
+        return
 
+    # Игрок в бою — начисляем штраф/премию
+    try:
+        # Получаем данные игроков
+        user_record = supabase.table("users").select("money").eq("user_id", user_id).execute().data[0]
+        opp_record = supabase.table("users").select("pvp_win, money").eq("user_id", opponent_id).execute().data[0]
+
+        user_money = user_record.get("money") or 0
+        opp_money = opp_record.get("money") or 0
+        opp_wins = opp_record.get("pvp_win") or 0
+
+        # Обновляем деньги и победы
+        new_user_money = max(0, user_money - 100)
+        new_opp_money = opp_money + 100
+        new_opp_wins = opp_wins + 1
+
+        supabase.table("users").update({
+            "money": new_user_money
+        }).eq("user_id", user_id).execute()
+
+        supabase.table("users").update({
+            "money": new_opp_money,
+            "pvp_win": new_opp_wins
+        }).eq("user_id", opponent_id).execute()
+
+        # Отправляем сообщения
+        await bot.send_message(user_id, "❌ Вы покинули арену. Вы проиграли и потеряли 100💰.")
+        await bot.send_message(opponent_id, "🏆 Ваш соперник вышел из боя. Вы победили и получили 100💰!")
+
+    except Exception as e:
+        print(f"Ошибка при обновлении баланса и отправке сообщений: {e}")
+
+    # Удаляем статус у обоих игроков
+    supabase.table("adventure_status").delete().or_(
+        f"user_id.eq.{user_id},user_id.eq.{opponent_id}"
+    ).execute()
 
 
 @dp.callback_query(lambda c: c.data in ["pvp_attack", "pvp_skip"])
 async def pvp_action(callback: types.CallbackQuery):
     user_id = str(callback.from_user.id)
-    action = callback.data  # "pvp_attack" або "pvp_skip"
+    action = callback.data  # "pvp_attack" или "pvp_skip"
 
-    # 📦 Получение боевых статусов
+    # Получение боевых статусов
     user_status_res = supabase.table("adventure_status").select("*").eq("user_id", user_id).execute()
     if not user_status_res.data:
-        await callback.answer("❗ Ви не берете участь у PvP.", show_alert=True)
+        await callback.answer("❗ Вы не участвуете в PvP.", show_alert=True)
         return
 
     user_status = user_status_res.data[0]
     opponent_id = user_status.get("opponent_id")
     if not opponent_id:
-        await callback.answer("❗ Противник не знайдений.", show_alert=True)
+        await callback.answer("❗ Противник не найден.", show_alert=True)
         return
 
     opp_status_res = supabase.table("adventure_status").select("*").eq("user_id", opponent_id).execute()
     if not opp_status_res.data:
-        await callback.answer("❗ Противник не знайдений.", show_alert=True)
+        await callback.answer("❗ Противник не найден.", show_alert=True)
         return
 
     opponent_status = opp_status_res.data[0]
 
-    # 🔄 Проверка очереди хода
+    # Проверка очереди хода
     if user_status["pvp_turn"] > opponent_status["pvp_turn"]:
-        await callback.answer("⏳ Зачекайте хід противника.", show_alert=True)
+        await callback.answer("⏳ Ожидайте ход противника.", show_alert=True)
         return
 
     logs = []
 
-    # ⚔️ PvP атака
     if action == "pvp_attack":
-        damage = user_status["attack"]
+        attacker_name_res = supabase.table("users").select("username").eq("user_id", user_id).execute()
+        defender_name_res = supabase.table("users").select("username").eq("user_id", opponent_id).execute()
+        attacker_name = attacker_name_res.data[0]["username"]
+        defender_name = defender_name_res.data[0]["username"]
+
+        # Уклонение (dodge) противника
+        dodge_chance = opponent_status.get("dodge", 0)
+        dodge_roll = random.uniform(0, 100)
+
+        # ... внутри блока if action == "pvp_attack":
+
+        if dodge_roll < dodge_chance:
+            # Противник уклонился
+            logs.append(f"🌀 {defender_name} уклонился от атаки {attacker_name}! Урон не нанесён.")
+            damage = 0
+        else:
+            crit_chance = user_status.get("crit", 0)
+            crit_roll = random.uniform(0, 100)
+            base_damage = user_status["attack"]
+            crit_multiplier = 1.2
+
+            if crit_roll < crit_chance:
+                damage = int(base_damage * crit_multiplier)
+                logs.append(f"🔥 {attacker_name} наносит критический удар! Урон: {damage}")
+            else:
+                damage = base_damage
+                logs.append(f"🗡️ {attacker_name} наносит обычный удар. Урон: {damage}")
+
         opp_hp_before = opponent_status["health"]
         new_opp_hp = max(0, opp_hp_before - damage)
 
-        # 💾 Обновление HP противника
+        # Контратака — половина урона, который нанес атакующий
+        counter_attack = opponent_status.get("counter_attack", 0)
+
+        if counter_attack > 0 and new_opp_hp > 0 and damage > 0:
+            counter_damage = damage // 2
+            attacker_hp_before = user_status["health"]
+            new_attacker_hp = max(0, attacker_hp_before - counter_damage)
+            supabase.table("adventure_status").update({
+                "health": new_attacker_hp
+            }).eq("user_id", user_id).execute()
+            logs.append(f"🛡️ {defender_name} контратакует и наносит {counter_damage} урона {attacker_name}.")
+
+        # Обновляем здоровье противника
         supabase.table("adventure_status").update({
             "health": new_opp_hp
         }).eq("user_id", opponent_id).execute()
 
-        logs.append(f"🗡️ Ви атакуєте та завдаєте {damage} урону.")
 
     else:
-        logs.append("⏭️ Ви пропускаєте хід.")
+        logs.append("⏭️ Вы пропускаете ход.")
 
-    # 💾 Обновление хода и последнего действия
+    # Обновление хода и последнего действия
     supabase.table("adventure_status").update({
         "pvp_turn": user_status["pvp_turn"] + 1,
-        "last_action": "🗡️ Удар" if action == "pvp_attack" else "⏭️ Пропуск"
+        "last_action": "\n".join(logs)
     }).eq("user_id", user_id).execute()
 
-    # 🔄 Проверка: оба ли сделали ход?
+    # Проверка: оба ли сделали ход?
     updated_user_status = supabase.table("adventure_status").select("*").eq("user_id", user_id).execute().data[0]
     updated_opp_status = supabase.table("adventure_status").select("*").eq("user_id", opponent_id).execute().data[0]
 
-    if updated_user_status["pvp_turn"] == updated_opp_status["pvp_turn"]:
-        u1, u2 = user_status["user_id"], opponent_status["user_id"]
-        a1, a2 = updated_user_status["last_action"], updated_opp_status["last_action"]
-        hp1, hp2 = updated_user_status["health"], updated_opp_status["health"]
+    # Получаем имена для отчёта
+    user_info = supabase.table("users").select("username").eq("user_id", user_id).execute().data[0]
+    opponent_info = supabase.table("users").select("username").eq("user_id", opponent_id).execute().data[0]
 
-        # 📄 Формируем отчёт
+    name1 = user_info["username"]
+    name2 = opponent_info["username"]
+
+    if updated_user_status["pvp_turn"] == updated_opp_status["pvp_turn"]:
         report = (
-            f"📢 Хід завершено:\n\n"
-            f"{u1}: {a1}\n"
-            f"{u2}: {a2}\n\n"
-            f"❤️ {u1}: {hp1} HP\n"
-            f"❤️ {u2}: {hp2} HP"
+            f"📢 Ход завершён:\n\n"
+            f"{name1}:\n{updated_user_status['last_action']}\n\n"
+            f"{name2}:\n{updated_opp_status['last_action']}\n\n"
+            f"❤️ {name1}: {updated_user_status['health']} HP\n"
+            f"❤️ {name2}: {updated_opp_status['health']} HP"
         )
 
-        # 🏁 Проверка завершения боя
+        # Проверка завершения боя
         result_msg = None
-        if hp1 <= 0 and hp2 <= 0:
-            result_msg = "🤝 Нічия! Обидва гравці впали одночасно."
-        elif hp1 <= 0:
-            result_msg = f"🏆 {u2} перемагає!\n💀 {u1} програє."
-        elif hp2 <= 0:
-            result_msg = f"🏆 {u1} перемагає!\n💀 {u2} програє."
+        if updated_user_status["health"] <= 0 and updated_opp_status["health"] <= 0:
+            result_msg = "🤝 Ничья! Оба игрока пали одновременно."
+        elif updated_user_status["health"] <= 0:
+            result_msg = f"🏆 {name2} побеждает!\n💀 {name1} проигрывает."
+        elif updated_opp_status["health"] <= 0:
+            result_msg = f"🏆 {name1} побеждает!\n💀 {name2} проигрывает."
 
-        # 📤 Отправка сообщений
         reply_markup = get_pvp_keyboard() if not result_msg else None
         await bot.send_message(user_id, report, reply_markup=reply_markup)
         await bot.send_message(opponent_id, report, reply_markup=reply_markup)
 
         if result_msg:
-            await bot.send_message(user_id, result_msg)
-            await bot.send_message(opponent_id, result_msg)
+            if updated_user_status["health"] <= 0 and updated_opp_status["health"] <= 0:
+                # Ничья — ничего не меняем
+                await bot.send_message(user_id, result_msg)
+                await bot.send_message(opponent_id, result_msg)
+            elif updated_user_status["health"] <= 0:
+                # Победил opponent
+                winner_record = \
+                supabase.table("users").select("pvp_win, money").eq("user_id", opponent_id).execute().data[0]
+                winner_wins = winner_record.get("pvp_win") or 0
+                winner_money = winner_record.get("money") or 0
 
-            # ❌ Удаление боевого статуса
+                loser_record = supabase.table("users").select("money").eq("user_id", user_id).execute().data[0]
+                loser_money = loser_record.get("money") or 0
+
+                # Обновляем победителю
+                supabase.table("users").update({
+                    "pvp_win": winner_wins + 1,
+                    "money": winner_money + 100
+                }).eq("user_id", opponent_id).execute()
+
+                # Обновляем проигравшему (минус 100, но не меньше 0)
+                new_loser_money = max(0, loser_money - 100)
+                supabase.table("users").update({
+                    "money": new_loser_money
+                }).eq("user_id", user_id).execute()
+
+                await bot.send_message(opponent_id, f"🏆 Вы победили и заработали 100💰!")
+                await bot.send_message(user_id, f"💀 Вы проиграли и потеряли 100💰!")
+
+                await bot.send_message(user_id, result_msg)
+                await bot.send_message(opponent_id, result_msg)
+
+            elif updated_opp_status["health"] <= 0:
+                # Победил user
+                winner_record = supabase.table("users").select("pvp_win, money").eq("user_id", user_id).execute().data[
+                    0]
+                winner_wins = winner_record.get("pvp_win") or 0
+                winner_money = winner_record.get("money") or 0
+
+                loser_record = supabase.table("users").select("money").eq("user_id", opponent_id).execute().data[0]
+                loser_money = loser_record.get("money") or 0
+
+                # Обновляем победителю
+                supabase.table("users").update({
+                    "pvp_win": winner_wins + 1,
+                    "money": winner_money + 100
+                }).eq("user_id", user_id).execute()
+
+                # Обновляем проигравшему (минус 100, но не меньше 0)
+                new_loser_money = max(0, loser_money - 100)
+                supabase.table("users").update({
+                    "money": new_loser_money
+                }).eq("user_id", opponent_id).execute()
+
+                await bot.send_message(user_id, f"🏆 Вы победили и заработали 100💰!")
+                await bot.send_message(opponent_id, f"💀 Вы проиграли и потеряли 100💰!")
+
+                await bot.send_message(user_id, result_msg)
+                await bot.send_message(opponent_id, result_msg)
+
+            # Удаление боевого статуса
             supabase.table("adventure_status").delete().or_(
                 f"user_id.eq.{user_id},user_id.eq.{opponent_id}"
             ).execute()
 
     else:
-        await callback.answer("✅ Хід прийнято.")
+        await callback.answer("✅ Ход принят.")
+
+
 
 
 @dp.callback_query(lambda c: c.data.startswith("equip_"))
