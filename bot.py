@@ -108,8 +108,8 @@ profile_kb = ReplyKeyboardMarkup(
 backpack_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🪖 Голова", callback_data="slot_head"), InlineKeyboardButton(text="👕 Тело", callback_data="slot_body")],
     [InlineKeyboardButton(text="🧤 Руки", callback_data="slot_gloves"), InlineKeyboardButton(text="👖 Ноги", callback_data="slot_legs")],
-    [InlineKeyboardButton(text="🥾 Ступни", callback_data="slot_feet"),InlineKeyboardButton(text="🗡 Оружие", callback_data="slot_weapon")],
-
+    [InlineKeyboardButton(text="🥾 Ступни", callback_data="slot_feet"), InlineKeyboardButton(text="🗡 Оружие", callback_data="slot_weapon")],
+    [InlineKeyboardButton(text="📦 Ресурсы", callback_data="view_resources")]
 ])
 
 # Создание клавиатуры для выбора экипировки
@@ -566,34 +566,34 @@ SETS = {
         "Бастион Титана": {
             "description": "🛡️ Массивный сет, дающий большое количество здоровья и щит для защиты",
             "items": [
-                {"id": 1, "name": "Шлем Стража", "hp": 150, "damage": 0, "head": "Голова"},
-                {"id": 2, "name": "Плащ Жизни", "hp": 250, "damage": 0, "body": "Тело"},
-                {"id": 3, "name": "Перчатки Защиты", "hp": 70, "damage": 0, "gloves": "Перчатки"},
-                {"id": 4, "name": "Пояс Скалы", "hp": 130, "damage": 0, "legs": "Ноги"},
+                {"id": 1, "name": "Шлем Стража", "hp": 120, "damage": 0, "head": "Голова"},
+                {"id": 2, "name": "Плащ Жизни", "hp": 200, "damage": 0, "body": "Тело"},
+                {"id": 3, "name": "Перчатки Защиты", "hp": 60, "damage": 0, "gloves": "Перчатки"},
+                {"id": 4, "name": "Пояс Скалы", "hp": 120, "damage": 0, "legs": "Ноги"},
                 {"id": 5, "name": "Наручи Титана", "hp": 50, "damage": 0, "feet": "Ступни"},
-                {"id": 6, "name": "Щит Вечной Стали", "hp": 150, "damage": 50, "weapon": "Оружие"}
+                {"id": 6, "name": "Щит Вечной Стали", "hp": 150, "damage": 80, "weapon": "Оружие"}
             ]
         },
         "Клинок Бури": {
             "description": "⚔️ Легкий и стремительный сет с фокусом на урон",
             "items": [
                 {"id": 7, "name": "Серьги Хищника", "hp": 30, "damage": 0, "head": "Голова"},
-                {"id": 8, "name": "Амулет Хищника", "hp": 60, "damage": 0, "body": "Тело"},
+                {"id": 8, "name": "Амулет Хищника", "hp": 40, "damage": 0, "body": "Тело"},
                 {"id": 9, "name": "Перчатки Гнева", "hp": 20, "damage": 0, "gloves": "Перчатки"},
                 {"id": 10, "name": "Пояс Хищника", "hp": 30, "damage": 0, "legs": "Ноги"},
-                {"id": 11, "name": "Сапоги Бури", "hp": 20, "damage": 0, "feet": "Ступни"},
-                {"id": 12, "name": "Меч Бури", "hp": 0, "damage": 200, "weapon": "Оружие"}
+                {"id": 11, "name": "Сапоги Бури", "hp": 30, "damage": 0, "feet": "Ступни"},
+                {"id": 12, "name": "Меч Бури", "hp": 0, "damage": 180, "weapon": "Оружие"}
             ]
         },
         "Возмездие": {
             "description": "🗡️ Сбалансированный сет с упором на среднее здоровье и урон",
             "items": [
                 {"id": 13, "name": "Шлем Судьбы", "hp": 60, "damage": 0, "head": "Голова"},
-                {"id": 14, "name": "Амулет Правосудия", "hp": 120, "damage": 0, "body": "Тело"},
+                {"id": 14, "name": "Амулет Правосудия", "hp": 100, "damage": 0, "body": "Тело"},
                 {"id": 15, "name": "Перчатки Карающего", "hp": 40, "damage": 0, "gloves": "Перчатки"},
                 {"id": 16, "name": "Пояс Ответа", "hp": 60, "damage": 0, "legs": "Ноги"},
                 {"id": 17, "name": "Сапоги Ярости", "hp": 40, "damage": 0, "feet": "Ступни"},
-                {"id": 18, "name": "Клинок Возмездия", "hp": 0, "damage": 100, "weapon": "Оружие"}
+                {"id": 18, "name": "Клинок Возмездия", "hp": 0, "damage": 120, "weapon": "Оружие"}
             ]
         }
     },
@@ -601,38 +601,73 @@ SETS = {
         "Забытый Страж": {
             "description": "🛡️ Надёжный сет с умеренным здоровьем и слабым уроном",
             "items": [
-                {"id": 19, "name": "Шлем Былого", "hp": 25, "damage": 0, "head": "Голова"},
-                {"id": 20, "name": "Доспех Чести", "hp": 75, "damage": 0, "body": "Тело"},
-                {"id": 21, "name": "Наручи Былого", "hp": 25, "damage": 0, "gloves": "Перчатки"},
-                {"id": 22, "name": "Пояс Нерушимости", "hp": 50, "damage": 0, "legs": "Ноги"},
-                {"id": 23, "name": "Поножи Былого", "hp": 25, "damage": 0, "feet": "Ступни"},
-                {"id": 24, "name": "Ржавая Секира", "hp": 0, "damage": 25, "weapon": "Оружие"}
+                {"id": 19, "name": "Шлем Былого", "hp": 50, "damage": 0, "head": "Голова"},
+                {"id": 20, "name": "Доспех Чести", "hp": 100, "damage": 0, "body": "Тело"},
+                {"id": 21, "name": "Наручи Былого", "hp": 40, "damage": 0, "gloves": "Перчатки"},
+                {"id": 22, "name": "Пояс Нерушимости", "hp": 60, "damage": 0, "legs": "Ноги"},
+                {"id": 23, "name": "Поножи Былого", "hp": 50, "damage": 0, "feet": "Ступни"},
+                {"id": 24, "name": "Ржавая Секира", "hp": 0, "damage": 50, "weapon": "Оружие"}
             ]
         },
         "Звёздный Живописец": {
             "description": "✨ Легкий сет с минимальным здоровьем, но сильным оружием",
             "items": [
-                {"id": 25, "name": "Капюшон Света", "hp": 5, "damage": 0, "head": "Голова"},
-                {"id": 26, "name": "Куртка Света", "hp": 15, "damage": 0, "body": "Тело"},
+                {"id": 25, "name": "Капюшон Света", "hp": 15, "damage": 0, "head": "Голова"},
+                {"id": 26, "name": "Куртка Света", "hp": 25, "damage": 0, "body": "Тело"},
                 {"id": 27, "name": "Перчатки Красок", "hp": 15, "damage": 0, "gloves": "Перчатки"},
-                {"id": 28, "name": "Юбка Света", "hp": 10, "damage": 0, "legs": "Ноги"},
-                {"id": 29, "name": "Сапоги Света", "hp": 5, "damage": 0, "feet": "Ступни"},
-                {"id": 30, "name": "Клинок Света", "hp": 0, "damage": 100, "weapon": "Оружие"}
+                {"id": 28, "name": "Юбка Света", "hp": 20, "damage": 0, "legs": "Ноги"},
+                {"id": 29, "name": "Сапоги Света", "hp": 25, "damage": 0, "feet": "Ступни"},
+                {"id": 30, "name": "Клинок Света", "hp": 0, "damage": 140, "weapon": "Оружие"}
             ]
         },
         "Охотник": {
             "description": "🏹 Сет для ловкости и средней защиты, с акцентом на оружие",
             "items": [
-                {"id": 31, "name": "Шляпа Охотника", "hp": 10, "damage": 0, "head": "Голова"},
-                {"id": 32, "name": "Плащ Теней", "hp": 40, "damage": 0, "body": "Тело"},
-                {"id": 33, "name": "Перчатки Охотника", "hp": 15, "damage": 0, "gloves": "Перчатки"},
-                {"id": 34, "name": "Штаны Охотника", "hp": 15, "damage": 0, "legs": "Ноги"},
-                {"id": 35, "name": "Кожаные Сапоги", "hp": 20, "damage": 0, "feet": "Ступни"},
-                {"id": 36, "name": "Трость-хлыст", "hp": 0, "damage": 50, "weapon": "Оружие"}
+                {"id": 31, "name": "Шляпа Охотника", "hp": 25, "damage": 0, "head": "Голова"},
+                {"id": 32, "name": "Плащ Теней", "hp": 50, "damage": 0, "body": "Тело"},
+                {"id": 33, "name": "Перчатки Охотника", "hp": 25, "damage": 0, "gloves": "Перчатки"},
+                {"id": 34, "name": "Штаны Охотника", "hp": 30, "damage": 0, "legs": "Ноги"},
+                {"id": 35, "name": "Кожаные Сапоги", "hp": 30, "damage": 0, "feet": "Ступни"},
+                {"id": 36, "name": "Трость-хлыст", "hp": 0, "damage": 90, "weapon": "Оружие"}
+            ]
+        }
+    },
+    "crafter": {
+        "Осенний Лист": {
+            "description": "🍁 Балансированный сет легендарного мастера. Осенний Лист сочетает разумную защиту с высоким уроном, используя самодельное, но смертоносное снаряжение.",
+            "items": [
+                {"id": 37, "name": "Капюшон Стратегии", "hp": 60, "damage": 0, "head": "Голова"},
+                {"id": 38, "name": "Куртка Искателя", "hp": 100, "damage": 0, "body": "Тело"},
+                {"id": 39, "name": "Перчатки Мастера", "hp": 40, "damage": 0, "gloves": "Перчатки"},
+                {"id": 40, "name": "Ремень Тактика", "hp": 60, "damage": 0, "legs": "Ноги"},
+                {"id": 41, "name": "Сапоги Скитальца", "hp": 50, "damage": 0, "feet": "Ступни"},
+                {"id": 42, "name": "Копьё Уничтожитель Зла", "hp": 80, "damage": 130, "weapon": "Оружие"}
             ]
         }
     }
 }
+
+DROP = {
+    "epic": {
+        "Теневой Обсидиан": {
+            "description": "🖤 Тёмный магический минерал, поглощающий свет. Применяется в усилении оружия и элитных доспехов.",
+            "chance": 5
+        }
+    },
+    "rare": {
+        "Тактическая Кожа": {
+            "description": "🧵 Обработанная кожа с элементами усиления. Часто используется мастерами для создания функциональной экипировки.",
+            "chance": 5
+        }
+    },
+    "common": {
+        "Листовая Сталь": {
+            "description": "🍃 Лёгкий, но прочный сплав, сделанный из обработанных листьев и металла. Используется для создания гибкой брони.",
+            "chance": 5
+        }
+    }
+}
+
 
 
 ADVENTURES = {
@@ -764,6 +799,24 @@ MONSTERS = {
         "rarity": "epic"
     }
 }
+
+def roll_drop():
+    material_pool = []
+
+    for rarity, materials in DROP.items():
+        for name, data in materials.items():
+            material_pool.append((name, data["chance"], rarity))
+
+    drop_roll = random.uniform(0, 100)
+    cumulative = 0
+
+    for name, chance, rarity in material_pool:
+        cumulative += chance
+        if drop_roll <= cumulative:
+            return name, rarity  # ✅ возвращаем два значения
+
+    return None, None  # ничего не выпало
+
 
 
 def get_items_by_slot(slot: str):
@@ -974,6 +1027,112 @@ async def start_pvp_search(message: Message):
             reply_markup=cancel_search_kb
         )
 
+async def handle_adventure(user_id: int, location_name: str, monster: dict, duration: int):
+    await asyncio.sleep(duration)
+
+    # Проверка премиума
+    premium_resp = supabase.table("users").select("premium_until").eq("user_id", user_id).execute()
+    premium_until_str = premium_resp.data[0].get("premium_until") if premium_resp.data else None
+    premium_active = False
+
+    if premium_until_str:
+        premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        if premium_until > now:
+            premium_active = True
+
+    # Получаем локацию
+    location = LOCATIONS.get(location_name)
+    base_exp = random.randint(*location["exp"])
+    base_money = random.randint(*location["money"])
+    bonus_exp = int(base_exp * 0.3) if premium_active else 0
+    bonus_money = int(base_money * 0.5) if premium_active else 0
+    total_exp = base_exp + bonus_exp
+    total_money = base_money + bonus_money
+
+    # Обновление баланса и опыта
+    user_data = supabase.table("users").select("money").eq("user_id", user_id).execute()
+    current_money = user_data.data[0]["money"] if user_data.data else 0
+
+    await add_experience(user_id, total_exp)
+
+    supabase.table("users").update({
+        "money": current_money + total_money
+    }).eq("user_id", user_id).execute()
+
+    # Удаление статуса приключения
+    supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
+
+    # Дроп логика
+    rarity_key = monster["rarity"].lower()
+    drop_chances = DROP_CHANCES.get(rarity_key, {"weak": 0.10, "strong": 0.02})
+    drop_roll = random.random()
+    item_dropped = None
+
+    if drop_roll < drop_chances["weak"]:
+        set_name, item = random_weak_item()
+        item_dropped = item
+        rarity_type = "слабый"
+    elif drop_roll < drop_chances["weak"] + drop_chances["strong"]:
+        set_name, item = random_strong_item()
+        item_dropped = item
+        rarity_type = "сильный"
+
+    if item_dropped:
+        item_name = item_dropped["name"]
+        await bot.send_message(
+            user_id,
+            f"🎉 Тебе выпал {rarity_type} предмет из сета <b>{set_name}</b>:\n"
+            f"🧩 <b>{item_name}</b>"
+        )
+        existing = supabase.table("backpack").select("count").eq("user_id", user_id).eq("item_name", item_name).execute()
+        if existing.data:
+            current_count = existing.data[0]["count"]
+            supabase.table("backpack").update({
+                "count": current_count + 1
+            }).eq("user_id", user_id).eq("item_name", item_name).execute()
+        else:
+            supabase.table("backpack").insert({
+                "user_id": user_id,
+                "item_name": item_name,
+                "count": 1
+            }).execute()
+    else:
+        material_name, material_rarity = roll_drop()
+        if material_name:
+            await bot.send_message(
+                user_id,
+                f"🪵 Ты нашёл ресурс:\n"
+                f"🔹 <b>{material_name}</b>"
+            )
+
+            existing = supabase.table("materials").select("count").eq("user_id", user_id).eq("material_name", material_name).execute()
+            if existing.data:
+                current_count = existing.data[0]["count"]
+                supabase.table("materials").update({
+                    "count": current_count + 1
+                }).eq("user_id", user_id).eq("material_name", material_name).execute()
+            else:
+                supabase.table("materials").insert({
+                    "user_id": user_id,
+                    "material_name": material_name,
+                    "count": 1
+                }).execute()
+
+    # Финальное сообщение
+    exp_text = f"{base_exp}+{bonus_exp}({total_exp})" if premium_active else str(base_exp)
+    money_text = f"{base_money}+{bonus_money}({total_money})" if premium_active else str(base_money)
+
+    await bot.send_message(
+        user_id,
+        f"✅ <b>Приключение завершено!</b>\n\n"
+        f"🏞️ Локация: <b>{location_name}</b>\n"
+        f"⚔️ Побежденный враг: <b>{monster['name']}</b>\n\n"
+        f"🎖 Получено опыта: <b>{exp_text}</b>\n"
+        f"💰 Получено монет: <b>{money_text}</b>",
+        reply_markup=main_menu_kb
+    )
+
 
 # Обробник натискання кнопок з категоріями
 @dp.message(lambda message: message.text in ["🪖 Голова", "👕 Тело", "🧤 Руки", "👖 Ноги", "👟 Ступни", "🗡️ Оружие"])
@@ -1080,43 +1239,43 @@ async def cmd_start(message: types.Message):
         await message.answer("Привет! Напиши, пожалуйста, свой никнейм.")
 
 
-async def start_adventure(message: types.Message, location_name: str):
-    location = LOCATIONS.get(location_name)
-    adventure = ADVENTURES.get(location_name)
+    async def start_adventure(message: types.Message, location_name: str):
+        location = LOCATIONS.get(location_name)
+        adventure = ADVENTURES.get(location_name)
 
-    if not location or not adventure:
-        await message.answer("❗ Приключение не найдено.")
-        return
+        if not location or not adventure:
+            await message.answer("❗ Приключение не найдено.")
+            return
 
-    duration = location["duration"]
-    user_id = message.from_user.id
+        duration = location["duration"]
+        user_id = message.from_user.id
 
-    # Випадковий монстр з урахуванням рідкості
-    monster = get_random_monster(adventure['mobs'])
+        # Випадковий монстр з урахуванням рідкості
+        monster = get_random_monster(adventure['mobs'])
 
-    name = monster["name"]
-    hp = monster["hp"]
-    dmg = monster["damage"]
-    dodge = monster["dodge"]
-    counter = monster["counter"]
-    desc = monster["description"]
-    rarity = monster["rarity"].capitalize()
+        name = monster["name"]
+        hp = monster["hp"]
+        dmg = monster["damage"]
+        dodge = monster["dodge"]
+        counter = monster["counter"]
+        desc = monster["description"]
+        rarity = monster["rarity"].capitalize()
 
-    # Повідомлення про початок пригоди та зустріч з монстром
-    await message.answer(
-        f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n\n"
-        f"👾 <b>Вы встретили монстра: {name}</b>\n"
-        f"📖 <i>{desc}</i>\n"
-        f"🏷 Редкость: <b>{rarity}</b>\n\n"
-        f"❤️ Здоровье: <b>{hp}</b>\n"
-        f"💥 Урон: <b>{dmg}</b>\n"
-        f"🌀 Уклонение: <b>{dodge}%</b>\n"
-        f"🔁 Контратака: <b>{counter}%</b>\n\n"
-        f"⏳ Приключение продлится <b>{duration}</b> секунд..."
-    )
+        # Повідомлення про початок пригоди та зустріч з монстром
+        await message.answer(
+            f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n\n"
+            f"👾 <b>Вы встретили монстра: {name}</b>\n"
+            f"📖 <i>{desc}</i>\n"
+            f"🏷 Редкость: <b>{rarity}</b>\n\n"
+            f"❤️ Здоровье: <b>{hp}</b>\n"
+            f"💥 Урон: <b>{dmg}</b>\n"
+            f"🌀 Уклонение: <b>{dodge}%</b>\n"
+            f"🔁 Контратака: <b>{counter}%</b>\n\n"
+            f"⏳ Приключение продлится <b>{duration}</b> секунд..."
+        )
 
-    # Очікуємо завершення
-    await asyncio.sleep(duration)
+        # Очікуємо завершення
+        await asyncio.sleep(duration)
 
     # Генеруємо нагороду
     exp = random.randint(*location["exp"])
@@ -1730,10 +1889,10 @@ async def handle_slot(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     slot = callback.data.replace("slot_", "")  # "head", "body", ...
 
-    items = get_user_backpack(user_id, supabase)
+    items = get_user_backpack(user_id, supabase)  # Ваша функция для получения предметов из таблицы backpack
     user_items = {item["item_name"]: item["count"] for item in items}
 
-    slot_items = get_items_by_slot(slot)  # Получаем список предметов для слота
+    slot_items = get_items_by_slot(slot)  # Ваша функция, возвращающая список предметов для слота
 
     slot_title = {
         "head": "🪖 Голова",
@@ -1765,8 +1924,35 @@ async def handle_slot(callback: types.CallbackQuery):
     if not found:
         message_lines.append("❌ У вас нет предметов в этом слоте.")
 
-    await callback.message.edit_text("\n".join(message_lines), parse_mode="HTML", reply_markup=backpack_keyboard)
+    await callback.message.edit_text(
+        "\n".join(message_lines),
+        parse_mode="HTML",
+        reply_markup=backpack_keyboard
+    )
 
+# Новый обработчик для ресурсов из таблицы materials
+@dp.callback_query(F.data == "view_resources")
+async def handle_resources(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+
+    response = supabase.table("materials").select("*").eq("user_id", user_id).execute()
+    materials = response.data
+
+    if not materials:
+        await callback.message.edit_text("📦 У вас пока нет ресурсов.", reply_markup=backpack_keyboard)
+        return
+
+    message_lines = ["<b>📦 Ваши ресурсы:</b>\n"]
+    for material in materials:
+        name = material["material_name"]
+        count = material["count"]
+        message_lines.append(f"🔹 <b>{name}</b> — <code>{count}</code> шт.")
+
+    await callback.message.edit_text(
+        "\n".join(message_lines),
+        parse_mode="HTML",
+        reply_markup=backpack_keyboard
+    )
 
 
 @dp.callback_query(lambda c: c.data.startswith("create_lot:"))
@@ -2214,18 +2400,19 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                 reply_markup=keyboard
             )
         elif data.startswith("start_adv_"):
-            await callback.answer()
             location_name = data[len("start_adv_"):]
             location = LOCATIONS.get(location_name)
             if not location:
                 await callback.answer("❗ Локация не найдена.", show_alert=True)
                 return
+
             user_data = supabase.table("users").select("level").eq("user_id", user_id).execute()
             user_level = user_data.data[0]["level"] if user_data.data else 1
             required_level = location.get("min_level", 1)
             if user_level < required_level:
                 await callback.answer(f"🔒 Доступно с {required_level} уровня.", show_alert=True)
                 return
+
             now = datetime.utcnow()
             existing_status = supabase.table("adventure_status").select("*").eq("user_id", user_id).execute()
             if existing_status.data:
@@ -2237,128 +2424,41 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
                     return
                 else:
                     supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
+
+            await callback.answer()  # 👈 ОБЯЗАТЕЛЬНО ДО sleep или create_task
+
             duration = location["duration"]
             end_time = now + timedelta(seconds=duration)
-            adventure = ADVENTURES.get(location_name)
-            monster = get_random_monster(location_name, adventure["mobs"])
-            mob = monster["name"]
-            desc = monster["description"]
-            hp = monster["hp"]
-            dmg = monster["damage"]
-            dodge = monster["dodge"]
-            counter = monster["counter"]
-            rarity = monster["rarity"].capitalize()
-            exp = random.randint(*location["exp"])
-            money = random.randint(*location["money"])
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
             supabase.table("adventure_status").upsert({
                 "user_id": user_id,
                 "location": location_name,
                 "end_time": end_time.isoformat()
             }).execute()
+
+            adventure = ADVENTURES.get(location_name)
+            monster = get_random_monster(location_name, adventure["mobs"])
+
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+
+            # Сообщение о начале
             await bot.send_message(
                 user_id,
                 f"🏃‍♂️ Ты отправился в <b>{location_name}</b>\n\n"
-                f"👾 <b>Вы встретили монстра: {mob}</b>\n"
-                f"📖 <i>{desc}</i>\n"
-                f"🏷 Редкость: <b>{rarity}</b>\n\n"
-                f"❤️ Здоровье: <b>{hp}</b>\n"
-                f"💥 Урон: <b>{dmg}</b>\n"
-                f"🌀 Уклонение: <b>{dodge}%</b>\n"
-                f"🔁 Контратака: <b>{counter}%</b>\n\n"
+                f"👾 <b>Вы встретили монстра: {monster['name']}</b>\n"
+                f"📖 <i>{monster['description']}</i>\n"
+                f"🏷 Редкость: <b>{monster['rarity'].capitalize()}</b>\n\n"
+                f"❤️ Здоровье: <b>{monster['hp']}</b>\n"
+                f"💥 Урон: <b>{monster['damage']}</b>\n"
+                f"🌀 Уклонение: <b>{monster['dodge']}%</b>\n"
+                f"🔁 Контратака: <b>{monster['counter']}%</b>\n\n"
                 f"⏳ Приключение продлится <b>{duration}</b> сек."
             )
-            await asyncio.sleep(duration)
-            # Завершение приключения — награды
-            # Обновляем деньги и опыт
 
-            premium_resp = supabase.table("users").select("premium_until").eq("user_id", user_id).execute()
-            premium_until_str = premium_resp.data[0].get("premium_until") if premium_resp.data else None
-            premium_active = False
-
-            if premium_until_str:
-                premium_until = datetime.fromisoformat(premium_until_str.replace("Z", "+00:00"))
-                now = datetime.now(timezone.utc)
-                if premium_until > now:
-                    premium_active = True
-
-            # Генерируем опыт и деньги
-            base_exp = random.randint(*location["exp"])
-            base_money = random.randint(*location["money"])
-
-            bonus_exp = int(base_exp * 0.3) if premium_active else 0
-            bonus_money = int(base_money * 0.5) if premium_active else 0
-
-            total_exp = base_exp + bonus_exp
-            total_money = base_money + bonus_money
-
-            # Обновляем деньги и опыт
-            user_data = supabase.table("users").select("money").eq("user_id", user_id).execute()
-            current_money = user_data.data[0]["money"] if user_data.data else 0
-
-            await add_experience(user_id, total_exp)
-
-            supabase.table("users").update({
-                "money": current_money + total_money
-            }).eq("user_id", user_id).execute()
-
-            # Удаляем статус приключения
-            supabase.table("adventure_status").delete().eq("user_id", user_id).execute()
-
-            # Попытка выпадения предмета
-            rarity_key = monster["rarity"].lower()
-            drop_chances = DROP_CHANCES.get(rarity_key, {"weak": 0.10, "strong": 0.02})
-
-            drop_roll = random.random()
-            item_dropped = None
-
-            if drop_roll < drop_chances["weak"]:
-                set_name, item = random_weak_item()
-                item_dropped = item
-                rarity_type = "слабый"
-            elif drop_roll < drop_chances["weak"] + drop_chances["strong"]:
-                set_name, item = random_strong_item()
-                item_dropped = item
-                rarity_type = "сильный"
-
-            if item_dropped:
-                item_name = item_dropped["name"]
-                await bot.send_message(
-                    user_id,
-                    f"🎉 Тебе выпал {rarity_type} предмет из сета <b>{set_name}</b>:\n"
-                    f"🧩 <b>{item_name}</b>"
-                )
-                existing = supabase.table("backpack").select("count").eq("user_id", user_id).eq("item_name",
-                                                                                                item_name).execute()
-                if existing.data:
-                    current_count = existing.data[0]["count"]
-                    supabase.table("backpack").update({
-                        "count": current_count + 1
-                    }).eq("user_id", user_id).eq("item_name", item_name).execute()
-                else:
-                    supabase.table("backpack").insert({
-                        "user_id": user_id,
-                        "item_name": item_name,
-                        "count": 1
-                    }).execute()
-
-            # Финальное сообщение
-            exp_text = f"{base_exp}+{bonus_exp}({total_exp})" if premium_active else str(base_exp)
-            money_text = f"{base_money}+{bonus_money}({total_money})" if premium_active else str(base_money)
-
-            await bot.send_message(
-                user_id,
-                f"✅ <b>Приключение завершено!</b>\n\n"
-                f"🏞️ Локация: <b>{location_name}</b>\n"
-                f"⚔️ Побежденный враг: <b>{mob}</b>\n\n"
-                f"🎖 Получено опыта: <b>{exp_text}</b>\n"
-                f"💰 Получено монет: <b>{money_text}</b>",
-                reply_markup=main_menu_kb
-            )
-
+            # ✅ Запуск фона
+            asyncio.create_task(handle_adventure(user_id, location_name, monster, duration))
 
         elif data == "back_to_adventures":
             await callback.answer()
