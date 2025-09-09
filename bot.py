@@ -435,44 +435,49 @@ async def add_experience(user_id: int, amount: int):
 
 
 
-# Функція для створення інлайн клавіатури, що показує тільки ті предмети, які є в рюкзаку
 async def create_inline_keyboard_from_backpack(user_id, category):
-    # Запитуємо всі предмети з рюкзака користувача
+    # Получаем все предметы из рюкзака пользователя
     backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
 
     if not backpack_data.data:
-        return None  # Якщо у користувача немає предметів в рюкзаку
+        return None  # Нет предметов в рюкзаке
 
-    # Фільтруємо предмети по категорії (якщо є)
     filtered_items = []
+
+    # Ищем предметы по категории в full_items
     for item in backpack_data.data:
         item_name = item['item_name']
         item_count = item['count']
+        matched = False
 
-        # Перевіряємо, чи цей предмет належить до вибраної категорії
-        for category_name, category_data in items.items():  # items - ваша категорія предметів
-            for set_item in category_data:
-                if set_item['name'] == item_name:
-                    if category_name == category:  # Порівнюємо категорії
-                        filtered_items.append((set_item, item_count))
+        for category_name, item_list in full_items.items():
+            if category_name != category:
+                continue
+
+            for equip_item in item_list:
+                if equip_item['name'] == item_name:
+                    filtered_items.append((equip_item, item_count))
+                    matched = True
                     break
+            if matched:
+                break
 
     if not filtered_items:
-        return None  # Якщо немає предметів в рюкзаку, що належать до цієї категорії
+        return None  # Ничего не найдено по категории
 
-    # Створюємо інлайн клавіатуру з фільтрованих предметів
+    # Генерация инлайн-кнопок
     buttons = [
-        InlineKeyboardButton(text=f"{item['name']} ({item_count})", callback_data=item['callback_data'])
-        for item, item_count in filtered_items
+        InlineKeyboardButton(
+            text=f"{item['name']} ({count})",
+            callback_data=item['callback_data']
+        )
+        for item, count in filtered_items
     ]
 
-    # Формуємо клавіатуру, де кожні дві кнопки будуть в одному ряду
-    keyboard_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
+    # Кнопки по два в ряд
+    keyboard_rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
 
-    # Створюємо об'єкт InlineKeyboardMarkup з правильним форматом
-    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
-
-    return keyboard
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
 
 def get_item_stats(item_name):
@@ -561,6 +566,64 @@ items = {
     ]
 }
 
+
+
+full_items = {
+    "head": [
+        {"name": "Шлем Стража", "callback_data": "equip_helmet_guard"},
+        {"name": "Серьги Хищника", "callback_data": "equip_ear_predator"},
+        {"name": "Шлем Судьбы", "callback_data": "equip_helmet_fate"},
+        {"name": "Шлем Былого", "callback_data": "equip_helmet_of_old"},
+        {"name": "Капюшон Света", "callback_data": "equip_hood_of_light"},
+        {"name": "Шляпа Охотника", "callback_data": "equip_hunter_hat"},
+        {"name": "Капюшон Стратегии", "callback_data": "equip_hood_of_strategy"}
+    ],
+    "body": [
+        {"name": "Плащ Жизни", "callback_data": "equip_cloak_of_life"},
+        {"name": "Амулет Хищника", "callback_data": "equip_amulet_of_predator"},
+        {"name": "Амулет Правосудия", "callback_data": "equip_amulet_of_justice"},
+        {"name": "Доспех Чести", "callback_data": "equip_armor_of_honor"},
+        {"name": "Куртка Света", "callback_data": "equip_jacket_of_light"},
+        {"name": "Плащ Теней", "callback_data": "equip_cloak_of_shadows"},
+        {"name": "Куртка Искателя", "callback_data": "equip_jacket_of_seeker"}
+    ],
+    "gloves": [
+        {"name": "Перчатки Защиты", "callback_data": "equip_gloves_of_protection"},
+        {"name": "Перчатки Гнева", "callback_data": "equip_gloves_of_wrath"},
+        {"name": "Перчатки Карающего", "callback_data": "equip_gloves_of_avenger"},
+        {"name": "Наручи Былого", "callback_data": "equip_bracers_of_old"},
+        {"name": "Перчатки Красок", "callback_data": "equip_gloves_of_paint"},
+        {"name": "Перчатки Охотника", "callback_data": "equip_hunter_gloves"},
+        {"name": "Перчатки Мастера", "callback_data": "equip_gloves_of_master"}
+    ],
+    "legs": [
+        {"name": "Пояс Скалы", "callback_data": "equip_belt_of_rock"},
+        {"name": "Пояс Хищника", "callback_data": "equip_belt_of_predator"},
+        {"name": "Пояс Ответа", "callback_data": "equip_belt_of_revenge"},
+        {"name": "Пояс Нерушимости", "callback_data": "equip_belt_of_indestructibility"},
+        {"name": "Юбка Света", "callback_data": "equip_skirt_of_light"},
+        {"name": "Штаны Охотника", "callback_data": "equip_hunter_pants"},
+        {"name": "Ремень Тактика", "callback_data": "equip_belt_of_tactician"}
+    ],
+    "feet": [
+        {"name": "Наручи Титана", "callback_data": "equip_bracers_of_titan"},
+        {"name": "Сапоги Бури", "callback_data": "equip_boots_of_storm"},
+        {"name": "Сапоги Ярости", "callback_data": "equip_boots_of_rage"},
+        {"name": "Поножи Былого", "callback_data": "equip_greaves_of_old"},
+        {"name": "Сапоги Света", "callback_data": "equip_boots_of_light"},
+        {"name": "Кожаные Сапоги", "callback_data": "equip_leather_boots"},
+        {"name": "Сапоги Скитальца", "callback_data": "equip_boots_of_wanderer"}
+    ],
+    "weapon": [
+        {"name": "Щит Вечной Стали", "callback_data": "equip_shield_of_eternal_steel"},
+        {"name": "Меч Бури", "callback_data": "equip_sword_of_storm"},
+        {"name": "Клинок Возмездия", "callback_data": "equip_blade_of_vengeance"},
+        {"name": "Ржавая Секира", "callback_data": "equip_rusty_axe"},
+        {"name": "Клинок Света", "callback_data": "equip_blade_of_light"},
+        {"name": "Трость-хлыст", "callback_data": "equip_whip_staff"},
+        {"name": "Копьё Уничтожитель Зла", "callback_data": "equip_spear_of_purifier"}
+    ]
+}
 SETS = {
     "strong": {
         "Бастион Титана": {
@@ -633,7 +696,7 @@ SETS = {
         }
     },
     "crafter": {
-        "Осенний Лист": {
+        "Осенний Лист 🍁": {
             "description": "🍁 Балансированный сет легендарного мастера. Осенний Лист сочетает разумную защиту с высоким уроном, используя самодельное, но смертоносное снаряжение.",
             "items": [
                 {"id": 37, "name": "Капюшон Стратегии", "hp": 60, "damage": 0, "head": "Голова"},
@@ -668,6 +731,37 @@ DROP = {
     }
 }
 
+craft_sets = {
+    "Осенний Лист 🍁": {
+        "Капюшон Стратегии": {
+            "Теневой Обсидиан": 1,
+            "Тактическая Кожа": 2,
+            "Листовая Сталь": 3
+        },
+        "Куртка Искателя": {
+            "Теневой Обсидиан": 2,
+            "Тактическая Кожа": 4,
+            "Листовая Сталь": 5
+        },
+        "Перчатки Мастера": {
+            "Тактическая Кожа": 2,
+            "Листовая Сталь": 3
+        },
+        "Ремень Тактика": {
+            "Тактическая Кожа": 2,
+            "Листовая Сталь": 2
+        },
+        "Сапоги Скитальца": {
+            "Тактическая Кожа": 2,
+            "Листовая Сталь": 3
+        },
+        "Копьё Уничтожитель Зла": {
+            "Теневой Обсидиан": 4,
+            "Тактическая Кожа": 3,
+            "Листовая Сталь": 2
+        }
+    }
+}
 
 
 ADVENTURES = {
@@ -916,6 +1010,53 @@ def get_pvp_keyboard():
         ]
     ])
 
+
+async def craft_item(user_id: int, item_name: str, needed_materials: dict, supabase):
+    # 1. Проверяем, хватает ли материалов
+    for material_name, required_count in needed_materials.items():
+        materials_resp = supabase.table("materials")\
+            .select("count")\
+            .eq("user_id", user_id)\
+            .eq("material_name", material_name)\
+            .execute()
+        if not materials_resp.data or materials_resp.data[0]["count"] < required_count:
+            return f"❌ Недостаточно материала: {material_name}"
+
+    # 2. Списываем материалы
+    for material_name, required_count in needed_materials.items():
+        materials_resp = supabase.table("materials")\
+            .select("count")\
+            .eq("user_id", user_id)\
+            .eq("material_name", material_name)\
+            .execute()
+        current_count = materials_resp.data[0]["count"]
+        supabase.table("materials")\
+            .update({"count": current_count - required_count})\
+            .eq("user_id", user_id)\
+            .eq("material_name", material_name)\
+            .execute()
+
+    # 3. Добавляем или обновляем предмет в рюкзаке
+    existing = supabase.table("backpack")\
+        .select("count")\
+        .eq("user_id", user_id)\
+        .eq("item_name", item_name)\
+        .execute()
+
+    if existing.data:
+        current_count = existing.data[0]["count"]
+        supabase.table("backpack")\
+            .update({"count": current_count + 1})\
+            .eq("user_id", user_id)\
+            .eq("item_name", item_name)\
+            .execute()
+    else:
+        supabase.table("backpack")\
+            .insert({"user_id": user_id, "item_name": item_name, "count": 1})\
+            .execute()
+
+    return f"✅ Вы успешно скрафтили предмет: {item_name}"
+
 # ---------- Clan selection ----------
 def get_user_backpack(user_id: int, supabase: Client):
     response = supabase.table("backpack").select("*").eq("user_id", user_id).execute()
@@ -1133,8 +1274,27 @@ async def handle_adventure(user_id: int, location_name: str, monster: dict, dura
         reply_markup=main_menu_kb
     )
 
+@dp.message(lambda message: message.text == "🔨 Крафт")
+async def handle_craft(message: types.Message):
+    crafter_sets = SETS.get("crafter", {})
 
-# Обробник натискання кнопок з категоріями
+    if not crafter_sets:
+        await message.answer("⚠️ Нет доступных сетов для крафта.")
+        return
+
+    # Создание клавиатуры с сетами
+    keyboard = [
+        [InlineKeyboardButton(text=set_name, callback_data=f"craft_set:{set_name}")]
+        for set_name in crafter_sets.keys()
+    ]
+
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await message.answer("🛠 Что вы хотите скрафтить?", reply_markup=markup)
+
+
+
+
+
 @dp.message(lambda message: message.text in ["🪖 Голова", "👕 Тело", "🧤 Руки", "👖 Ноги", "👟 Ступни", "🗡️ Оружие"])
 async def show_items(message: types.Message):
     category = None
@@ -1560,7 +1720,7 @@ async def handle_messages(message: types.Message):
     elif text == "⚒️ Кузница":
         await message.answer("Выберите действие:", reply_markup=forge_menu_kb)
 
-    elif text in ("⚔️ Заточка", "🔨 Крафт"):
+    elif text in ("⚔️ Заточка"):
         await message.answer("⚙️ В разработке...", reply_markup=forge_menu_kb)
 
 
@@ -2219,7 +2379,204 @@ async def pvp_action(callback: types.CallbackQuery):
     else:
         await callback.answer("✅ Ход принят.")
 
+@dp.callback_query(lambda call: call.data == "back_to_forge")
+async def handle_back_to_forge(call: types.CallbackQuery):
+    crafter_sets = SETS.get("crafter", {})
 
+    if not crafter_sets:
+        await call.message.edit_text("⚠️ Нет доступных сетов для крафта.")
+        return
+
+    keyboard = [
+        [InlineKeyboardButton(text=set_name, callback_data=f"craft_set:{set_name}")]
+        for set_name in crafter_sets.keys()
+    ]
+
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await call.message.edit_text("🛠 Что вы хотите скрафтить?", reply_markup=markup)
+
+@dp.callback_query(lambda call: call.data.startswith("craft_item:"))
+async def handle_craft_item(call: types.CallbackQuery):
+    item_id = int(call.data.split(":")[1])
+    user_id = call.from_user.id
+
+    found_item = None
+    set_name = None
+
+    # Ищем предмет по ID в crafter-сетах
+    for s_name, s_data in SETS.get("crafter", {}).items():
+        for item in s_data.get("items", []):
+            if item["id"] == item_id:
+                found_item = item
+                set_name = s_name
+                break
+        if found_item:
+            break
+
+    if not found_item:
+        await call.answer("❌ Предмет не найден.", show_alert=True)
+        return
+
+    item_name = found_item["name"]
+
+    # Получаем нужные материалы
+    craft_data = craft_sets.get(set_name, {})
+    needed_materials = craft_data.get(item_name, {})
+
+    # Проверка наличия всех нужных материалов
+    for material_name, required_count in needed_materials.items():
+        materials_resp = supabase.table("materials")\
+            .select("count")\
+            .eq("user_id", user_id)\
+            .eq("material_name", material_name)\
+            .execute()
+
+        if not materials_resp.data or materials_resp.data[0]["count"] < required_count:
+            await call.answer(f"❌ Не хватает материала: {material_name}", show_alert=True)
+            return
+
+    # Списываем материалы
+    for material_name, required_count in needed_materials.items():
+        materials_resp = supabase.table("materials")\
+            .select("count")\
+            .eq("user_id", user_id)\
+            .eq("material_name", material_name)\
+            .execute()
+
+        current_count = materials_resp.data[0]["count"]
+        supabase.table("materials")\
+            .update({"count": current_count - required_count})\
+            .eq("user_id", user_id)\
+            .eq("material_name", material_name)\
+            .execute()
+
+    # Добавляем или обновляем предмет в рюкзаке
+    existing = supabase.table("backpack")\
+        .select("count")\
+        .eq("user_id", user_id)\
+        .eq("item_name", item_name)\
+        .execute()
+
+    if existing.data:
+        current_count = existing.data[0]["count"]
+        supabase.table("backpack")\
+            .update({"count": current_count + 1})\
+            .eq("user_id", user_id)\
+            .eq("item_name", item_name)\
+            .execute()
+    else:
+        supabase.table("backpack")\
+            .insert({"user_id": user_id, "item_name": item_name, "count": 1})\
+            .execute()
+
+    # Сообщение об успехе
+    await call.answer("✅ Вы успешно скрафтили предмет!", show_alert=True)
+    await call.message.edit_text(
+        f"🎉 Поздравляем! Вы создали предмет:\n<b>{item_name}</b>\n\n"
+        f"🧱 Из сета: <b>{set_name}</b>",
+        parse_mode="HTML"
+    )
+@dp.callback_query(lambda call: call.data.startswith("item_info:"))
+async def handle_item_info(call: types.CallbackQuery):
+    item_id = int(call.data.split(":")[1])
+    found_item = None
+    set_name = None
+
+    # Ищем предмет по ID в crafter-сетах
+    for s_name, s_data in SETS.get("crafter", {}).items():
+        for item in s_data.get("items", []):
+            if item["id"] == item_id:
+                found_item = item
+                set_name = s_name
+                break
+        if found_item:
+            break
+
+    if not found_item:
+        await call.answer("❌ Предмет не найден.")
+        return
+
+    item_name = found_item["name"]
+    hp = found_item.get("hp", 0)
+    dmg = found_item.get("damage", 0)
+
+    # Название части тела (ключ, кроме стандартных)
+    part = next((k for k in found_item if k not in ["id", "name", "hp", "damage"]), "???")
+
+    # Получаем нужные материалы из craft_sets
+    craft_data = craft_sets.get(set_name, {})
+    materials = craft_data.get(item_name, {})
+
+    materials_text = "\n".join([f"- {mat}: {amt}" for mat, amt in materials.items()]) if materials else "❓ Нет данных."
+
+    # Инлайн-кнопки
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛠 Скрафтить", callback_data=f"craft_item:{item_id}")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data=f"craft_set:{set_name}")]
+    ])
+
+    await call.message.edit_text(
+        f"🧱 Сет: *{set_name}*\n"
+        f"📦 Предмет: *{item_name}*\n\n"
+        f"❤️ HP: {hp}\n⚔️ Урон: {dmg}\n"
+        f"🔧 Необходимые материалы:\n{materials_text}",
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+
+@dp.callback_query(lambda call: call.data.startswith("craft_set:"))
+async def handle_craft_set_selection(call: types.CallbackQuery):
+    set_name = call.data.split(":", 1)[1]
+    crafter_sets = SETS.get("crafter", {})
+    selected_set = crafter_sets.get(set_name)
+
+    if not selected_set:
+        await call.message.edit_text("❌ Сет не найден.")
+        return
+
+    description = selected_set.get("description", "Описание отсутствует.")
+    items = selected_set.get("items", [])
+
+    # Инлайн кнопки с названием + статы (❤️ HP, ⚔️ урон)
+    item_buttons = []
+    for item in items:
+        name = item["name"]
+        hp = item.get("hp", 0)
+        dmg = item.get("damage", 0)
+        stats_str = f"❤️ {hp} ⚔️ {dmg}"
+        item_buttons.append([
+            InlineKeyboardButton(
+                text=f"{name}  {stats_str}",
+                callback_data=f"item_info:{item['id']}"
+            )
+        ])
+
+    # Кнопка назад
+    item_buttons.append([
+        InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_forge")
+    ])
+
+    markup = InlineKeyboardMarkup(inline_keyboard=item_buttons)
+
+    # 👇 Считаем ресурсы из craft_sets
+    materials_summary = {}
+
+    craft_info = craft_sets.get(set_name, {})  # set_name должен совпадать (например "Осенний Лист 🍁")
+    for item_materials in craft_info.values():
+        for material, amount in item_materials.items():
+            materials_summary[material] = materials_summary.get(material, 0) + amount
+
+    # Формируем текст итоговый
+    materials_text = "\n".join([f"- {mat}: {amt}" for mat, amt in materials_summary.items()])
+
+    # Ответ
+    await call.message.edit_text(
+        f"🧱 Вы выбрали сет: *{set_name}*\n\n"
+        f"{description}\n\n"
+        f"*Необходимые материалы для всего сета:*\n{materials_text}",
+        parse_mode="Markdown",
+        reply_markup=markup
+    )
 
 
 @dp.callback_query(lambda c: c.data.startswith("equip_"))
@@ -2230,8 +2587,8 @@ async def handle_item_selection(callback_query: types.CallbackQuery):
     selected_item = None
     item_category = None
 
-    # Поиск предмета в словаре items
-    for category_name, category_data in items.items():
+    # Поиск предмета в full_items
+    for category_name, category_data in full_items.items():
         for item in category_data:
             if item['callback_data'] == selected_item_callback:
                 selected_item = item
@@ -2250,14 +2607,16 @@ async def handle_item_selection(callback_query: types.CallbackQuery):
         await callback_query.answer("❗ Пользователь не найден.", show_alert=True)
         return
 
+    # Проверка, не надето ли уже что-то в этом слоте
     current_equipped = user_data.data.get(item_category)
     if current_equipped and current_equipped != "нет":
         await callback_query.answer(f"⛔ Уже надето: {current_equipped}", show_alert=True)
         return
 
-    # Проверяем наличие предмета в рюкзаке
+    # Проверка, есть ли предмет в рюкзаке
+    item_name = selected_item["name"]
     backpack_entry = supabase.table("backpack").select("count")\
-        .eq("user_id", user_id).eq("item_name", selected_item["name"]).single().execute()
+        .eq("user_id", user_id).eq("item_name", item_name).single().execute()
 
     if not backpack_entry.data or backpack_entry.data["count"] < 1:
         await callback_query.answer("❗ У вас нет этого предмета.", show_alert=True)
@@ -2265,25 +2624,25 @@ async def handle_item_selection(callback_query: types.CallbackQuery):
 
     new_count = backpack_entry.data["count"] - 1
 
-    # Уменьшаем количество предмета в рюкзаке или удаляем
+    # Уменьшаем количество или удаляем предмет из рюкзака
     if new_count == 0:
-        supabase.table("backpack").delete().eq("user_id", user_id).eq("item_name", selected_item["name"]).execute()
+        supabase.table("backpack").delete().eq("user_id", user_id).eq("item_name", item_name).execute()
     else:
         supabase.table("backpack").update({"count": new_count})\
-            .eq("user_id", user_id).eq("item_name", selected_item["name"]).execute()
+            .eq("user_id", user_id).eq("item_name", item_name).execute()
 
-    # Получаем бонусы предмета
-    hp_bonus, damage_bonus = get_item_stats(selected_item["name"])
+    # Получаем характеристики предмета
+    hp_bonus, damage_bonus = get_item_stats(item_name)
 
-    # Обновляем экипировку и характеристики
+    # Обновляем экипировку и характеристики пользователя
     supabase.table("users").update({
-        item_category: selected_item["name"],
+        item_category: item_name,
         "health": user_data.data.get("health", 0) + hp_bonus,
         "attack": user_data.data.get("attack", 0) + damage_bonus
     }).eq("user_id", user_id).execute()
 
     await callback_query.message.edit_reply_markup()
-    await callback_query.message.answer(f"✅ Надето: <b>{selected_item['name']}</b>")
+    await callback_query.message.answer(f"✅ Надето: <b>{item_name}</b>")
 
 @dp.callback_query()
 async def handle_clan_callbacks(callback: types.CallbackQuery):
