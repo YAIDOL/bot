@@ -5,6 +5,7 @@ import random
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types, F
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.client.default import DefaultBotProperties
@@ -13,6 +14,8 @@ from dotenv import load_dotenv
 
 
 # ---------- Load environment ----------
+
+
 now = datetime.now(timezone.utc)
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -86,6 +89,16 @@ top_menu_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+
+clan_battle_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📌 Сделать пин"), KeyboardButton(text="📊 Результаты битвы")],
+        [KeyboardButton(text="⬅️ Главная")],
+    ],
+    resize_keyboard=True
+)
+
 
 forge_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -134,6 +147,152 @@ unequip_kb = ReplyKeyboardMarkup(
 async def notify_users_on_start():
     print("Бот запущен и уведомляет пользователей...")
     # Тут можна зробити розсилку або інші дії
+
+async def show_clan_control_status():
+    try:
+        print("📢 Показ текущего контроля над локациями...")
+
+        allowed_locations = {
+            "🏰 Проклятая Цитадель",
+            "🌋 Утроба Вулкана",
+            "🕸️ Паутина Забвения",
+            "👁️ Обитель Иллюзий"
+        }
+
+        # Получаем текущие данные из clancv
+        clancv_table = supabase.table("clancv").select("*").execute()
+        clancv_rows = clancv_table.data or []
+
+        for location in allowed_locations:
+            controlling_clan = None
+
+            for row in clancv_rows:
+                if row.get(location) == True:
+                    controlling_clan = row["clan_name"]
+                    break  # нашли первого — выходим
+
+            if controlling_clan:
+                print(f"📍 {location}: находится под контролем клана {controlling_clan}")
+            else:
+                print(f"📍 {location}: локация свободна")
+
+    except Exception as e:
+        print(f"❌ Ошибка при выводе статуса локаций: {e}")
+
+
+async def schedule_clan_battle_results():
+    while True:
+        now = datetime.utcnow()  # или локальное время, если нужно
+        # Целевое время — 19:00 МСК, это UTC+3 => 16:00 UTC
+        target_time_utc = now.replace(hour=16, minute=0, second=0, microsecond=0)
+
+        if now >= target_time_utc:
+            # Если уже после 16:00, ставим цель на следующий день
+            target_time_utc += timedelta(days=1)
+
+        wait_seconds = (target_time_utc - now).total_seconds()
+        print(f"⏳ Жду до следующего запуска: {wait_seconds} секунд")
+
+        await asyncio.sleep(wait_seconds)
+
+        print("▶️ Запуск подсчёта клановой битвы")
+        await run_clan_battle_results()
+
+
+async def run_clan_battle_results():
+    try:
+        print("✅ Начинается обработка результатов клановой битвы...")
+
+        allowed_locations = {
+            "🏰 Проклятая Цитадель",
+            "🌋 Утроба Вулкана",
+            "🕸️ Паутина Забвения",
+            "👁️ Обитель Иллюзий"
+        }
+
+        # 1. Обнуляем таблицу result_clan_battle
+        result_table = supabase.table("result_clan_battle").select("*").execute()
+        existing_rows = result_table.data or []
+
+        if existing_rows:
+            columns_to_reset = [key for key in existing_rows[0].keys() if key != "clan_name"]
+            for row in existing_rows:
+                clan_name = row["clan_name"]
+                reset_data = {col: 0 for col in columns_to_reset}
+                supabase.table("result_clan_battle").update(reset_data).eq("clan_name", clan_name).execute()
+
+            print("🔄 Все значения в таблице result_clan_battle успешно обнулены.")
+        else:
+            print("⚠️ Таблица result_clan_battle пуста, нечего обнулять.")
+
+        # 2. Получаем данные с clan_battle
+        response = supabase.table("clan_battle").select("clan_name, pin, health, attack").execute()
+        data = response.data or []
+
+        # 3. Группируем и суммируем урон по (clan_name, pin)
+        results = {}
+        for row in data:
+            clan = row.get("clan_name")
+            pin = row.get("pin")
+            health = row.get("health", 0)
+            attack = row.get("attack", 0)
+
+            if clan and pin:
+                value = health * attack
+                results[(clan, pin)] = results.get((clan, pin), 0) + value
+
+        # 4. Обновляем таблицу result_clan_battle
+        for (clan, pin), value_to_add in results.items():
+            supabase.table("result_clan_battle").update({pin: value_to_add}).eq("clan_name", clan).execute()
+
+        print("✅ Результаты обновлены на основе произведения health * attack.")
+
+        # 5. Сброс всех значений локаций в clancv в False
+        print("🧹 Сбрасываем все значения локаций в clancv на False...")
+        clancv_table = supabase.table("clancv").select("clan_name").execute()
+        clancv_rows = clancv_table.data or []
+
+        for row in clancv_rows:
+            clan_name = row["clan_name"]
+            reset_locations = {location: False for location in allowed_locations}
+            supabase.table("clancv").update(reset_locations).eq("clan_name", clan_name).execute()
+
+        print("🔁 Все значения локаций в clancv успешно сброшены.")
+
+        # 6. Определяем победителей по каждой локации
+        print("🏆 Определяем победителей по локациям...")
+
+        top_clans_by_location = {}
+        result_table = supabase.table("result_clan_battle").select("*").execute()
+        updated_rows = result_table.data or []
+
+        for location in allowed_locations:
+            max_damage = 0
+            top_clan = None
+            for row in updated_rows:
+                clan_name = row["clan_name"]
+                damage = row.get(location, 0)
+                if damage > max_damage:
+                    max_damage = damage
+                    top_clan = clan_name
+
+            if top_clan:
+                top_clans_by_location[location] = top_clan
+                supabase.table("clancv").update({location: True}).eq("clan_name", top_clan).execute()
+                print(f"✅ {location}: победитель — {top_clan} с уроном {max_damage}")
+            else:
+                print(f"⚠️ {location}: нет данных для определения победителя")
+
+        # 7. Очистка таблицы clan_battle
+        print("🗑️ Очищаем таблицу clan_battle...")
+        supabase.table("clan_battle").delete().neq("clan_name", "").execute()
+        print("✅ Таблица clan_battle успешно очищена.")
+        await show_clan_control_status()
+
+    except Exception as e:
+        print(f"❌ Ошибка при обновлении результатов: {e}")
+
+
 
 
 ITEMS_PER_PAGE = 10
@@ -566,7 +725,19 @@ items = {
     ]
 }
 
+locations = {
+    "🏰 Проклятая Цитадель": "Величественные руины древнего замка, утопающего в тумане и загадках прошлого.",
+    "🌋 Утроба Вулкана": "Огненная пещера с мерцающими лавовыми потоками и горячими источниками, наполненная силой природы.",
+    "🕸️ Паутина Забвения": "Туманный каньон, украшенный гигантскими сверкающими паутинами, переливающимися в солнечном свете.",
+    "👁️ Обитель Иллюзий": "Мистическое место, где небо играет всеми оттенками, а мир словно растворяется в волшебстве."
+}
 
+allowed_locations = {
+    "🏰 Проклятая Цитадель",
+    "🌋 Утроба Вулкана",
+    "🕸️ Паутина Забвения",
+    "👁️ Обитель Иллюзий"
+}
 
 full_items = {
     "head": [
@@ -986,6 +1157,49 @@ def get_random_monster(location_name: str, location_mobs: list):
     pool = rarity_pool.get(rarity, rarity_pool["common"])
     return random.choice(pool)
 
+allowed_locations = set(locations.keys())
+
+def get_locations_text(user_id):
+    text = "Выберите локацию для пина:\n\n"
+
+    try:
+        response = supabase.table("clan_battle") \
+            .select("pin") \
+            .eq("user_id", user_id) \
+            .limit(1) \
+            .execute()
+
+        data = response.data or []
+
+        if data and data[0].get("pin"):
+            pin_location = data[0]["pin"]
+            text += f"📍 Ваш пин: {pin_location}\n\n"
+        else:
+            text += "📍 Ваш пин: отсутствует\n\n"
+
+    except Exception as e:
+        print(f"❌ Ошибка при получении пина игрока: {e}")
+        text += "📍 Ваш пин: ошибка при получении\n\n"
+
+    # Добавляем описание локаций
+    for name, desc in locations.items():
+        text += f"{name}\n{desc}\n\n"
+
+    # Добавляем информацию о клановой войне
+    text += "⚔️ Клановая война (КВ) проводится каждый день в 19:00. Будьте готовы!\n"
+
+    return text
+
+
+
+
+def get_locations_inline_kb() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text=name, callback_data=f"loc_{name}")]
+        for name in locations.keys()
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 def build_pvp_message(my, opponent):
     return (
         f"🛡️ Противник найден!\n\n"
@@ -1291,7 +1505,45 @@ async def handle_craft(message: types.Message):
     markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await message.answer("🛠 Что вы хотите скрафтить?", reply_markup=markup)
 
+@dp.message(lambda message: message.text == "📊 Результаты битвы")
+async def send_battle_results(message: Message):
+    try:
+        allowed_locations = {
+            "🏰 Проклятая Цитадель",
+            "🌋 Утроба Вулкана",
+            "🕸️ Паутина Забвения",
+            "👁️ Обитель Иллюзий"
+        }
 
+        # Получаем данные из таблицы clancv
+        clancv_table = supabase.table("clancv").select("*").execute()
+        clancv_rows = clancv_table.data or []
+
+        result_lines = []
+
+        for location in allowed_locations:
+            controlling_clan = None
+
+            for row in clancv_rows:
+                if row.get(location) == True:
+                    controlling_clan = row["clan_name"]
+                    break
+
+            if controlling_clan:
+                result_lines.append(f"{location} — под контролем клана *{controlling_clan}*")
+            else:
+                result_lines.append(f"{location} — свободна")
+
+        result_text = "\n".join(result_lines)
+
+        await message.answer(
+            text=f"📊 *Результаты клановой битвы:*\n\n{result_text}",
+            parse_mode="Markdown"
+        )
+
+    except Exception as e:
+        print(f"❌ Ошибка при выводе результатов: {e}")
+        await message.answer("❌ Ошибка при получении результатов битвы.")
 
 
 
@@ -1380,6 +1632,13 @@ async def unequip_item(message: types.Message):
     await message.answer(f"❌ Снято: <b>{equipped_item}</b>")
 
 
+
+@dp.message(lambda message: message.text == "📌 Сделать пин")
+async def send_pin_menu(message: types.Message):
+    user_id = message.from_user.id
+    text = get_locations_text(user_id)
+    kb = get_locations_inline_kb()
+    await message.answer(text, reply_markup=kb)
 
 
 # ---------- /start ----------
@@ -1777,6 +2036,10 @@ async def handle_messages(message: types.Message):
 
     elif text == "🏪 Рынок":
         await message.answer("🏪 Добро пожаловать на рынок! Выберите действие:", reply_markup=market_menu_kb)
+
+
+    elif text == "🛡️ Клановая битва":
+        await message.answer("Выберите действие:", reply_markup=clan_battle_kb)
 
 
 @dp.callback_query(lambda c: c.data.startswith("remove_lot_"))
@@ -2524,6 +2787,60 @@ async def handle_item_info(call: types.CallbackQuery):
         reply_markup=keyboard
     )
 
+@dp.callback_query(lambda c: c.data and c.data.startswith("loc_"))
+async def clan_battle_callback(callback: types.CallbackQuery):
+    data = callback.data
+    user_id = callback.from_user.id
+    location_name = data[4:]
+
+    if location_name not in allowed_locations:
+        return
+
+    # Получаем клан пользователя
+    clan_resp = supabase.table("clan_members").select("clan_name").eq("user_id", user_id).execute()
+    if not clan_resp.data:
+        await callback.answer("Вы не состоите в клане.", show_alert=True)
+        return
+    clan = clan_resp.data[0]['clan_name']
+
+    # Получаем health и attack пользователя из users
+    user_resp = supabase.table("users").select("health", "attack").eq("user_id", user_id).execute()
+    if not user_resp.data:
+        await callback.answer("Пользователь не найден в таблице пользователей.", show_alert=True)
+        return
+    health = user_resp.data[0]['health']
+    attack = user_resp.data[0]['attack']
+
+    # Проверяем есть ли запись в clan_battle
+    record_resp = supabase.table("clan_battle").select("pin").eq("user_id", user_id).execute()
+
+    if not record_resp.data:
+        # Добавляем новую запись с health и attack
+        supabase.table("clan_battle").insert({
+            "user_id": user_id,
+            "clan_name": clan,
+            "pin": location_name,
+            "health": health,
+            "attack": attack
+        }).execute()
+
+        await callback.answer(f"Вы выбрали локацию: {location_name}", show_alert=True)
+    else:
+        current_pin = record_resp.data[0]['pin']
+        if current_pin == location_name:
+            await callback.answer("Вы уже выбрали эту локацию!", show_alert=True)
+        else:
+            supabase.table("clan_battle").update({
+                "pin": location_name,
+                "health": health,
+                "attack": attack
+            }).eq("user_id", user_id).execute()
+
+            await callback.answer(f"Локация изменена на: {location_name}", show_alert=True)
+
+
+
+
 @dp.callback_query(lambda call: call.data.startswith("craft_set:"))
 async def handle_craft_set_selection(call: types.CallbackQuery):
     set_name = call.data.split(":", 1)[1]
@@ -2839,7 +3156,9 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
 # ---------- Run bot ----------
 async def main():
     await notify_users_on_start()
+    asyncio.create_task(schedule_clan_battle_results())
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
