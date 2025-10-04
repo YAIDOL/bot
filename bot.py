@@ -184,7 +184,7 @@ async def schedule_clan_battle_results():
     while True:
         now = datetime.utcnow()  # или локальное время, если нужно
         # Целевое время — 19:00 МСК, это UTC+3 => 16:00 UTC
-        target_time_utc = now.replace(hour=16, minute=1, second=0, microsecond=0)
+        target_time_utc = now.replace(hour=9, minute=1, second=0, microsecond=0)
 
         if now >= target_time_utc:
             # Если уже после 16:00, ставим цель на следующий день
