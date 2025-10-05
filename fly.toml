@@ -2,6 +2,7 @@ app = "bot-vfm5ig"
 primary_region = "ams"
 
 [build]
+  dockerfile = "Dockerfile"
 
 [[vm]]
   memory = "1gb"
