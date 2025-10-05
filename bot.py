@@ -312,10 +312,10 @@ async def scheduler():
     while True:
         now = datetime.now(timezone.utc)  # timezone-aware время
         run_times = {
-            "clear_results": now.replace(hour=9, minute=01, second=1, microsecond=0),
-            "calculate_results": now.replace(hour=9, minute=02, second=1, microsecond=0),
-            "clear_clan_battle": now.replace(hour=9, minute=03, second=1, microsecond=0),
-            "update_clancv": now.replace(hour=9, minute=04, second=1, microsecond=0),
+            "clear_results": now.replace(hour=9, minute=1, second=1, microsecond=0),
+            "calculate_results": now.replace(hour=9, minute=2, second=1, microsecond=0),
+            "clear_clan_battle": now.replace(hour=9, minute=3, second=1, microsecond=0),
+            "update_clancv": now.replace(hour=9, minute=4, second=1, microsecond=0),
         }
 
         for key in run_times:
