@@ -312,10 +312,11 @@ async def scheduler():
     while True:
         now = datetime.now(timezone.utc)  # timezone-aware время
         run_times = {
-            "clear_results": now.replace(hour=9, minute=1, second=1, microsecond=0),
-            "calculate_results": now.replace(hour=9, minute=2, second=1, microsecond=0),
-            "clear_clan_battle": now.replace(hour=9, minute=3, second=1, microsecond=0),
-            "update_clancv": now.replace(hour=9, minute=4, second=1, microsecond=0),
+            "clear_results": now.replace(hour=16, minute=1, second=1, microsecond=0),
+            "calculate_results": now.replace(hour=16, minute=2, second=1, microsecond=0),
+            "clear_clan_battle": now.replace(hour=16, minute=3, second=1, microsecond=0),
+            "update_clancv": now.replace(hour=16, minute=4, second=1, microsecond=0),
+            "broadcast_battle_results": now.replace(hour=16, minute=5, second=1, microsecond=0),
         }
 
         for key in run_times:
@@ -335,6 +336,7 @@ async def scheduler():
                 await run_clear_clan_battle()
             elif name == "update_clancv":
                 await run_update_clancv()
+            elif name == "broadcast_battle_results":
                 await broadcast_battle_results()
 
 ITEMS_PER_PAGE = 10
