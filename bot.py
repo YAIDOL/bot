@@ -2,6 +2,7 @@ import os
 import asyncio
 import re
 import random
+from random import randint
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types, F
@@ -14,7 +15,9 @@ from dotenv import load_dotenv
 
 
 # ---------- Load environment ----------
-
+user_states = {}
+ITEMS_PER_PAGE = 5
+ITEMS_PER_PAGE = 5
 
 now = datetime.now(timezone.utc)
 load_dotenv()
@@ -34,6 +37,19 @@ lot_creation_data = {}
 waiting_for_nick = set()
 
 # ---------- Keyboards ----------
+upgrade_select_kb = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🪖 Голова", callback_data="upgrade_category:head"),
+        InlineKeyboardButton(text="👕 Тело", callback_data="upgrade_category:body"),
+        InlineKeyboardButton(text="🧤 Руки", callback_data="upgrade_category:gloves")
+    ],
+    [
+        InlineKeyboardButton(text="👖 Ноги", callback_data="upgrade_category:legs"),
+        InlineKeyboardButton(text="👟 Ступни", callback_data="upgrade_category:feet"),
+        InlineKeyboardButton(text="🗡️ Оружие", callback_data="upgrade_category:weapon")
+    ]
+])
+
 cancel_search_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="❌ Уйти с арены", callback_data="pvp_cancel")]
@@ -70,6 +86,13 @@ trade_menu_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+upgrade_menu_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🔧 Заточить"), KeyboardButton(text="ℹ️ Информация")],
+        [KeyboardButton(text="⬅️ Главная")]
+    ],
+    resize_keyboard=True
+)
 
 main_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -89,7 +112,6 @@ top_menu_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 clan_battle_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -339,8 +361,6 @@ async def scheduler():
             elif name == "broadcast_battle_results":
                 await broadcast_battle_results()
 
-ITEMS_PER_PAGE = 10
-
 async def create_paginated_inline_keyboard(user_id, items, supabase, page=0, category="все"):
     backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
 
@@ -396,7 +416,7 @@ async def create_paginated_inline_keyboard(user_id, items, supabase, page=0, cat
 
 
 
-ITEMS_PER_PAGE = 10
+
 
 
 async def show_market(message: types.Message, page: int = 1):
@@ -537,7 +557,6 @@ async def handle_create_lot_start(message: types.Message):
 async def handle_remove_lot_menu(message: types.Message):
     await show_user_lots(message, page=1)
 
-ITEMS_PER_PAGE = 10  # можно изменить
 
 async def show_user_lots(message_or_callback, page: int = 1):
     user_id = message_or_callback.from_user.id if hasattr(message_or_callback, "from_user") else message_or_callback.from_user.id
@@ -640,7 +659,7 @@ async def add_experience(user_id: int, amount: int):
 
 async def create_inline_keyboard_from_backpack(user_id, category):
     # Получаем все предметы из рюкзака пользователя
-    backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
+    backpack_data = supabase.table("backpack").select("item_name, count, upgrade").eq("user_id", user_id).execute()
 
     if not backpack_data.data:
         return None  # Нет предметов в рюкзаке
@@ -651,6 +670,7 @@ async def create_inline_keyboard_from_backpack(user_id, category):
     for item in backpack_data.data:
         item_name = item['item_name']
         item_count = item['count']
+        item_upgrade = item.get('upgrade', 0)  # Может быть None
         matched = False
 
         for category_name, item_list in full_items.items():
@@ -659,37 +679,29 @@ async def create_inline_keyboard_from_backpack(user_id, category):
 
             for equip_item in item_list:
                 if equip_item['name'] == item_name:
-                    filtered_items.append((equip_item, item_count))
+                    display_name = item_name
+                    if isinstance(item_upgrade, int) and item_upgrade > 0:
+                        display_name += f" +{item_upgrade}"
+
+                    filtered_items.append({
+                        "text": f"{display_name} ({item_count})",
+                        "callback_data": f"equip:{item_name}:{item_upgrade}"
+                    })
                     matched = True
                     break
             if matched:
                 break
 
     if not filtered_items:
-        return None  # Ничего не найдено по категории
+        return None
 
-    # Генерация инлайн-кнопок
-    buttons = [
-        InlineKeyboardButton(
-            text=f"{item['name']} ({count})",
-            callback_data=item['callback_data']
-        )
-        for item, count in filtered_items
+    # Каждая кнопка в 1 колонку
+    keyboard_rows = [
+        [InlineKeyboardButton(text=item['text'], callback_data=item['callback_data'])]
+        for item in filtered_items
     ]
 
-    # Кнопки по два в ряд
-    keyboard_rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-
     return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
-
-
-def get_item_stats(item_name):
-    for tier in SETS.values():
-        for set_data in tier.values():
-            for item in set_data["items"]:
-                if item["name"] == item_name:
-                    return item["hp"], item["damage"]
-    return 0, 0
 
 
 def build_pvp_message(player, opponent):
@@ -710,7 +722,68 @@ def build_pvp_message(player, opponent):
     )
 
 
+def get_user_items(user_id):
+    response = supabase.table("backpack").select("item_name, count, upgrade").eq("user_id", user_id).execute()
+    items = response.data or []
+    valid_names = [i["name"] for category in full_items.values() for i in category]
+    filtered = [item for item in items if item["item_name"] in valid_names and item["count"] > 0]
+    return filtered
 
+def create_paginated_keyboard(items, page):
+    # Фильтруем предметы, которые ещё можно апгрейдить
+    filtered_items = []
+    max_upgrade_limits = {"weak": 5, "strong": 10, "crafter": 15}
+
+    for item in items:
+        item_name_raw = item['item_name'].lower().replace(" ", "_")
+        # Определяем категорию предмета
+        item_category = None
+        for category_name, category_data in SETS.items():
+            for set_name, set_data in category_data.items():
+                for i in set_data["items"]:
+                    if i["name"].lower().replace(" ", "_") == item_name_raw:
+                        item_category = category_name
+                        break
+                if item_category:
+                    break
+            if item_category:
+                break
+
+        if not item_category:
+            continue  # если не нашли категорию — пропускаем
+
+        max_upgrade = max_upgrade_limits.get(item_category, 5)
+        current_upgrade = item.get("upgrade") or 0
+
+        if current_upgrade < max_upgrade:
+            filtered_items.append(item)
+
+    # Пагинация
+    start = page * ITEMS_PER_PAGE
+    end = start + ITEMS_PER_PAGE
+    page_items = filtered_items[start:end]  # беремо тільки поточну сторінку
+
+    buttons = []
+    for item in page_items:
+        upgrade = item.get("upgrade") or 0
+        upgrade_str = f"+{upgrade}" if upgrade > 0 else ""
+        text = f"{item['item_name']} {upgrade_str} ({item['count']})"
+        # Включаем upgrade в callback_data
+        callback = f"do_upgrade:{item['item_name'].lower().replace(' ', '_')}:{upgrade}"
+        buttons.append([InlineKeyboardButton(text=text, callback_data=callback)])  # 1 кнопка = 1 рядок
+
+    # Кнопки пагінації
+    pagination_buttons = []
+    total_pages = (len(filtered_items) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE  # скільки всього сторінок
+    if page > 0:
+        pagination_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"change_page:{page-1}"))
+    if page + 1 < total_pages:
+        pagination_buttons.append(InlineKeyboardButton(text="➡️ Далее", callback_data=f"change_page:{page+1}"))
+
+    if pagination_buttons:
+        buttons.append(pagination_buttons)
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 # ---------- Clans ----------
 CLANS = {
     "Звездные стражи 🌌": "🛡 <b>Звездные стражи</b> — это древнее и неуловимое братство, чья связь с космосом и тайнами вселенной глубока и неразрывна. Они — вечные наблюдатели, хранители небесного порядка и защитники миров от угроз, исходящих из бездны космоса. Их взгляд устремлен к звездам, а сердца бьются в ритме галактических циклов.",
@@ -718,6 +791,30 @@ CLANS = {
     "Тенистые клинки 🌑": "🌑 <b>Тенистые клинки</b> — это древнее братство, чье существование окутано тайной и легендами. Они не стремятся к славе или открытому признанию, предпочитая действовать из теней, словно невидимые вихри, которые оставляют за собой лишь след судьбы.",
     "Безмолвные песни 🎵": "🎵 <b>Безмолвные песни</b> — это загадочное и меланхоличное сообщество, чье существование окутано завесой печали и древних тайн. Они не владеют острыми клинками или громогласными криками, их оружие — это эмоции, воспоминания и эхо забытых мелодий. Члены этого клана — хранители скорби, носители утерянных историй и проводники через лабиринты человеческих чувств."
 }
+
+info_text = (
+    "⚒ <b>Система Заточки Предметов</b>\n\n"
+    "🔧 <b>Заточка</b> — это способ улучшить характеристики вашей экипировки.\n"
+    "Каждый уровень заточки увеличивает силу оружия или прочность брони.\n"
+    "Максимальный уровень — <b>+15</b>.\n\n"
+    "📊 <b>Типы предметов и предел заточки:</b>\n"
+    "• 🪙 <b>Слабая экипировка</b> — максимум <b>+5</b>\n"
+    "• 🛡 <b>Сильная экипировка</b> — максимум <b>+10</b>\n"
+    "• ⚒ <b>Крафтовая экипировка</b> — максимум <b>+15</b>\n\n"
+    "📈 <b>Бонусы по уровням:</b>\n\n"
+    "🗡 <b>Оружие</b>:\n"
+    "• +1 — +5: 🔺 Урон +5\n"
+    "• +6 — +10: 🔺 Урон +10\n"
+    "• +11 — +15: 🔺 Урон +15\n\n"
+    "🛡 <b>Броня</b>:\n"
+    "• +1 — +5: ❤️ HP +10\n"
+    "• +6 — +10: ❤️ HP +15\n"
+    "• +11 — +15: ❤️ HP +20\n\n"
+    "⚠️ <b>Чем выше уровень заточки — тем сильнее ваш персонаж.</b>\n"
+    "<b>Но также растёт стоимость прокачки и шанс неудачи</b>.\n"
+)
+
+
 items = {
     "head": [
         {"name": "Шлем Стража", "callback_data": "equip_helmet_guard"},
@@ -839,6 +936,28 @@ full_items = {
         {"name": "Копьё Уничтожитель Зла", "callback_data": "equip_spear_of_purifier"}
     ]
 }
+
+UPGRADES = {
+    "description": "🔧 Усиление предметов с помощью заточки. Повышает характеристики брони и оружия.",
+    "levels": {
+        "+1": {"weapon": {"damage": 5}, "armor": {"hp": 10}, "chance": 70},
+        "+2": {"weapon": {"damage": 5}, "armor": {"hp": 10}, "chance": 65},
+        "+3": {"weapon": {"damage": 5}, "armor": {"hp": 10}, "chance": 60},
+        "+4": {"weapon": {"damage": 5}, "armor": {"hp": 10}, "chance": 55},
+        "+5": {"weapon": {"damage": 5}, "armor": {"hp": 10}, "chance": 50},
+        "+6": {"weapon": {"damage": 10}, "armor": {"hp": 15}, "chance": 45},
+        "+7": {"weapon": {"damage": 10}, "armor": {"hp": 15}, "chance": 40},
+        "+8": {"weapon": {"damage": 10}, "armor": {"hp": 15}, "chance": 35},
+        "+9": {"weapon": {"damage": 10}, "armor": {"hp": 15}, "chance": 30},
+        "+10": {"weapon": {"damage": 10}, "armor": {"hp": 15}, "chance": 25},
+        "+11": {"weapon": {"damage": 20}, "armor": {"hp": 30}, "chance": 20},
+        "+12": {"weapon": {"damage": 20}, "armor": {"hp": 30}, "chance": 15},
+        "+13": {"weapon": {"damage": 20}, "armor": {"hp": 30}, "chance": 10},
+        "+14": {"weapon": {"damage": 20}, "armor": {"hp": 30}, "chance": 5},
+        "+15": {"weapon": {"damage": 20}, "armor": {"hp": 30}, "chance": 5}
+    }
+}
+
 SETS = {
     "strong": {
         "Бастион Титана": {
@@ -914,12 +1033,12 @@ SETS = {
         "Осенний Лист 🍁": {
             "description": "🍁 Балансированный сет легендарного мастера. Осенний Лист сочетает разумную защиту с высоким уроном, используя самодельное, но смертоносное снаряжение.",
             "items": [
-                {"id": 37, "name": "Капюшон Стратегии", "hp": 60, "damage": 0, "head": "Голова"},
-                {"id": 38, "name": "Куртка Искателя", "hp": 100, "damage": 0, "body": "Тело"},
-                {"id": 39, "name": "Перчатки Мастера", "hp": 40, "damage": 0, "gloves": "Перчатки"},
-                {"id": 40, "name": "Ремень Тактика", "hp": 60, "damage": 0, "legs": "Ноги"},
-                {"id": 41, "name": "Сапоги Скитальца", "hp": 50, "damage": 0, "feet": "Ступни"},
-                {"id": 42, "name": "Копьё Уничтожитель Зла", "hp": 80, "damage": 130, "weapon": "Оружие"}
+                {"id": 37, "name": "Капюшон Стратегии", "hp": 95, "damage": 0, "head": "Голова"},
+                {"id": 38, "name": "Куртка Искателя", "hp": 165, "damage": 0, "body": "Тело"},
+                {"id": 39, "name": "Перчатки Мастера", "hp": 65, "damage": 0, "gloves": "Перчатки"},
+                {"id": 40, "name": "Ремень Тактика", "hp": 95, "damage": 0, "legs": "Ноги"},
+                {"id": 41, "name": "Сапоги Скитальца", "hp": 80, "damage": 0, "feet": "Ступни"},
+                {"id": 42, "name": "Копьё Уничтожитель Зла", "hp": 20, "damage": 130, "weapon": "Оружие"}
             ]
         }
     }
@@ -930,6 +1049,10 @@ DROP = {
         "Теневой Обсидиан": {
             "description": "🖤 Тёмный магический минерал, поглощающий свет. Применяется в усилении оружия и элитных доспехов.",
             "chance": 5
+        },
+        "Редкий свиток заточки": {
+            "description": "📜✨ Магический свиток для заточки сильного снаряжения — придаст мощь и стойкость вашей экипировке.",
+            "chance": 2
         }
     },
     "rare": {
@@ -942,6 +1065,10 @@ DROP = {
         "Листовая Сталь": {
             "description": "🍃 Лёгкий, но прочный сплав, сделанный из обработанных листьев и металла. Используется для создания гибкой брони.",
             "chance": 5
+        },
+        "Обычный свиток заточки": {
+            "description": "📜⚔️ Простой свиток для заточки слабого снаряжения — поможет сделать вашу экипировку немного лучше.",
+            "chance": 3
         }
     }
 }
@@ -1203,6 +1330,76 @@ def get_random_monster(location_name: str, location_mobs: list):
 
 allowed_locations = set(locations.keys())
 
+
+async def create_upgrade_keyboard_with_pagination(user_id: int, category: str, page: int = 1):
+    # Получаем предметы из рюкзака
+    backpack_data = supabase.table("backpack").select("item_name, count").eq("user_id", user_id).execute()
+    if not backpack_data.data:
+        return None, None  # Нет предметов
+
+    filtered_items = []
+
+    # Категории для фильтра
+    if category == "weapon":
+        categories_to_search = ["weapon"]
+    elif category == "armor":
+        categories_to_search = [k for k in full_items if k != "weapon"]
+    else:
+        return None, None
+
+    # Фильтрация предметов
+    for item in backpack_data.data:
+        item_name = item['item_name']
+        item_count = item['count']
+
+        for category_name in categories_to_search:
+            for equip_item in full_items.get(category_name, []):
+                if equip_item['name'] == item_name:
+                    callback = f"upgrade_item:{item['item_name'].lower().replace(' ', '')}"
+                    filtered_items.append({
+                        "name": equip_item['name'],
+                        "count": item_count,
+                        "callback_data": callback
+                    })
+
+    if not filtered_items:
+        return None, None
+
+    # Постраничная разбивка
+    total_items = len(filtered_items)
+    max_page = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+    page = max(1, min(page, max_page))
+    offset = (page - 1) * ITEMS_PER_PAGE
+    page_items = filtered_items[offset:offset + ITEMS_PER_PAGE]
+
+    # Кнопки с предметами
+    buttons = []
+    row = []
+    for item in page_items:
+        btn = InlineKeyboardButton(
+            text=f"{item['name']} ({item['count']})",
+            callback_data=item['callback_data']
+        )
+        row.append(btn)
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    # Пагинация (если предметов > 10)
+    if total_items > ITEMS_PER_PAGE:
+        nav_buttons = []
+        if page > 1:
+            InlineKeyboardButton(text="⏪ Назад", callback_data=f"upgrade_page_{category}_{page - 1}")
+        if page < max_page:
+            InlineKeyboardButton(text="⏩ Далее", callback_data=f"upgrade_page_{category}_{page + 1}")
+        if nav_buttons:
+            buttons.append(nav_buttons)
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons), page
+
+
 def get_locations_text(user_id):
     text = "Выберите локацию для пина:\n\n"
 
@@ -1235,6 +1432,15 @@ def get_locations_text(user_id):
     return text
 
 
+def get_item_stats(item_name: str):
+
+
+    for set_type in SETS.values():
+        for set_name, set_data in set_type.items():
+            for item in set_data['items']:
+                if item['name'] == item_name:
+                    return item.get("hp", 0), item.get("damage", 0)
+    return 0, 0
 
 
 def get_locations_inline_kb() -> InlineKeyboardMarkup:
@@ -1620,7 +1826,7 @@ async def show_items(message: types.Message):
 async def unequip_item(message: types.Message):
     user_id = message.from_user.id
 
-    # Определение категории
+    # Категорії
     category_map = {
         "❌ Голова": "head",
         "❌ Тело": "body",
@@ -1630,51 +1836,72 @@ async def unequip_item(message: types.Message):
         "❌ Оружие": "weapon"
     }
     category = category_map[message.text]
+    upgrade_column = f"upgrade_{category}"
 
-    # Получаем данные пользователя
+    # Отримуємо дані користувача
     user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
     if not user_data.data:
-        await message.answer("❗ Пользователь не найден.")
+        await message.answer("❗ Користувач не знайдений.")
         return
 
     equipped_item = user_data.data.get(category)
-
     if not equipped_item or equipped_item == "нет":
-        await message.answer("⚠️ В этой категории ничего не надето.")
+        await message.answer("⚠️ У цій категорії нічого не надягнуто.")
         return
 
-    # Получаем бонусы предмета
+    # Беремо базові бонуси
     hp_bonus, damage_bonus = get_item_stats(equipped_item)
 
-    # Обновляем экипировку и характеристики
-    new_health = max(0, user_data.data.get("health", 0) - hp_bonus)
-    new_attack = max(0, user_data.data.get("attack", 0) - damage_bonus)
+    # Отримуємо рівень заточки
+    item_upgrade = user_data.data.get(upgrade_column, 0) or 0
 
+    # 🔧 Якщо є заточка, рахуємо сумарний бонус
+    total_hp_bonus = 0
+    total_damage_bonus = 0
+
+    if isinstance(item_upgrade, int) and item_upgrade > 0:
+        for level in range(1, item_upgrade + 1):
+            level_key = f"+{level}"
+            if level_key in UPGRADES["levels"]:
+                data = UPGRADES["levels"][level_key]
+                if category == "weapon":
+                    total_damage_bonus += data["weapon"]["damage"]
+                else:
+                    total_hp_bonus += data["armor"]["hp"]
+
+    # Підрахунок нових характеристик
+    new_health = max(0, user_data.data.get("health", 0) - hp_bonus - total_hp_bonus)
+    new_attack = max(0, user_data.data.get("attack", 0) - damage_bonus - total_damage_bonus)
+
+    # Оновлюємо користувача: прибираємо річ і заточку
     supabase.table("users").update({
         category: "нет",
+        upgrade_column: 0,  # або можна None якщо колонка допускає NULL
         "health": new_health,
         "attack": new_attack
     }).eq("user_id", user_id).execute()
 
-    # Обновляем/добавляем в рюкзак
-    backpack_response = supabase.table("backpack").select("count")\
-        .eq("user_id", user_id).eq("item_name", equipped_item).execute()
+    # Додаємо предмет у backpack з урахуванням upgrade
+    existing = supabase.table("backpack").select("count")\
+        .eq("user_id", user_id).eq("item_name", equipped_item).eq("upgrade", item_upgrade).execute()
 
-    backpack_data = backpack_response.data[0] if backpack_response.data else None
-
-    if backpack_data:
-        new_count = backpack_data["count"] + 1
+    if existing.data:
+        new_count = existing.data[0]["count"] + 1
         supabase.table("backpack").update({"count": new_count})\
-            .eq("user_id", user_id).eq("item_name", equipped_item).execute()
+            .eq("user_id", user_id).eq("item_name", equipped_item).eq("upgrade", item_upgrade).execute()
     else:
         supabase.table("backpack").insert({
             "user_id": user_id,
             "item_name": equipped_item,
-            "count": 1
+            "count": 1,
+            "upgrade": item_upgrade
         }).execute()
 
-    await message.answer(f"❌ Снято: <b>{equipped_item}</b>")
-
+    # Відповідь гравцю
+    text = f"❌ Снято: <b>{equipped_item}</b>"
+    if item_upgrade > 0:
+        text += f" (+{item_upgrade})"
+    await message.answer(text)
 
 
 @dp.message(lambda message: message.text == "📌 Сделать пин")
@@ -1820,32 +2047,51 @@ async def handle_messages(message: types.Message):
                 else:
                     premium_status = "❌ Не активен"
 
+            # Список слотов экипировки и их отображаемые имена
+            equip_slots = {
+                "head": "Голова",
+                "body": "Тело",
+                "gloves": "Перчатки",
+                "legs": "Ноги",
+                "feet": "Ступни",
+                "weapon": "Оружие"
+            }
+
+            # Формируем строки экипировки с учётом заточек
+            equip_lines = []
+            for key, display_name in equip_slots.items():
+                item_name = row.get(key, "нет") or "нет"
+                upgrade_value = row.get(f"upgrade_{key}", 0)
+
+                # Добавляем +N, если есть заточка
+                if isinstance(upgrade_value, int) and upgrade_value > 0:
+                    item_name += f" +{upgrade_value}"
+
+                equip_lines.append(f"{display_name}: {item_name}")
+
+            # Собираем текст профиля
             profile_text = (
-                f"<b>{row['username']}</b> | <code>{user_id}</code>\n"
-                f"Статус аккаунта: {row['status']}\n"
-                f"Премиум статус: {premium_status}{premium_remaining}\n\n"
-                f"🌟 Уровень: {row['level']}\n"
-                f"Опыт: {row['exp']} / {row['exp_max']}\n"
-                f"Очки прокачки: {row.get('level_points', 0)}\n"
-                f"❤️ {row['health']} | 🗡 {row['attack']}\n"
-                f"🌀 Уклонение: {row.get('dodge', 0)}%\n"
-                f"🎯 Крит: {row.get('crit', 0)}%\n"
-                f"🔁 Контратака: {row.get('counter_attack', 0)}%\n\n"
-                f"💰 Деньги: {row['money']} | 💎 Алмазы: {row['diamonds']}\n\n"
-                f"🥋 Экипировка:\n"
-                f"Голова: {row['head']}\n"
-                f"Тело: {row['body']}\n"
-                f"Перчатки: {row.get('gloves')}\n"
-                f"Ноги: {row['legs']}\n"
-                f"Ступни: {row['feet']}\n"
-                f"Оружие: {row['weapon']}\n"
-                f"💪 Клан: {row.get('clan', 'нет')}"
+                    f"<b>{row['username']}</b> | <code>{user_id}</code>\n"
+                    f"Статус аккаунта: {row['status']}\n"
+                    f"Премиум статус: {premium_status}{premium_remaining}\n\n"
+                    f"🌟 Уровень: {row['level']}\n"
+                    f"Опыт: {row['exp']} / {row['exp_max']}\n"
+                    f"Очки прокачки: {row.get('level_points', 0)}\n"
+                    f"❤️ {row['health']} | 🗡 {row['attack']}\n"
+                    f"🌀 Уклонение: {row.get('dodge', 0)}%\n"
+                    f"🎯 Крит: {row.get('crit', 0)}%\n"
+                    f"🔁 Контратака: {row.get('counter_attack', 0)}%\n\n"
+                    f"💰 Деньги: {row['money']} | 💎 Алмазы: {row['diamonds']}\n\n"
+                    f"🥋 Экипировка:\n" +
+                    "\n".join(equip_lines) +
+                    f"\n💪 Клан: {row.get('clan', 'нет')}"
             )
 
             await message.answer(profile_text, reply_markup=profile_kb)
         else:
             waiting_for_nick.add(user_id)
             await message.answer("Никнейм не найден. Введите свой никнейм.")
+
 
     elif text == "🎒 Рюкзак":
         await message.answer("🎒 Выберите слот:", reply_markup=backpack_keyboard)
@@ -2023,8 +2269,14 @@ async def handle_messages(message: types.Message):
     elif text == "⚒️ Кузница":
         await message.answer("Выберите действие:", reply_markup=forge_menu_kb)
 
-    elif text in ("⚔️ Заточка"):
-        await message.answer("⚙️ В разработке...", reply_markup=forge_menu_kb)
+    elif text == "⚔️ Заточка":
+        await message.answer("Выберите действие:", reply_markup=upgrade_menu_kb)
+
+    elif text == "🔧 Заточить":
+        await message.answer(UPGRADES["description"], reply_markup=upgrade_select_kb)
+
+    elif text == "ℹ️ Информация":
+        await message.answer(info_text, parse_mode="HTML")
 
 
 
@@ -2217,7 +2469,330 @@ async def buy_premium_callback(callback_query: types.CallbackQuery):
 
     await callback_query.message.edit_text(message_text)
 
+@dp.callback_query(lambda c: c.data and c.data.startswith("upgrade_category:"))
+async def upgrade_category_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    category = callback.data.split(":")[1]
+    user_states[user_id] = {"category": category, "page": 0}
 
+    items = get_user_items(user_id)
+    valid_names = [i["name"] for i in full_items.get(category, [])]
+    filtered = [item for item in items if item["item_name"] in valid_names]
+
+    if not filtered:
+        await callback.message.answer("❗ У вас нет предметов в этой категории.")
+        await callback.answer()
+        return
+
+    # 👉 теперь передаём только текущую страницу
+    keyboard = create_paginated_keyboard(filtered, 0)
+    user_states[user_id]["filtered_items"] = filtered  # сохраняем в state
+    await callback.message.answer(
+        f"🧩 Выберите предмет из категории <b>{category}</b>:",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("change_page:"))
+async def change_page_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    new_page = int(callback.data.split(":")[1])
+
+    if user_id not in user_states or "filtered_items" not in user_states[user_id]:
+        await callback.answer("⚠️ Сессия устарела, выберите категорию заново.")
+        return
+
+    user_states[user_id]["page"] = new_page
+    filtered = user_states[user_id]["filtered_items"]
+
+    keyboard = create_paginated_keyboard(filtered, new_page)
+    await callback.message.edit_text(
+        f"⚙️ Выберите предмет для улучшения (стр. {new_page+1})",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("upgrade_item:"))
+async def upgrade_item_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    item_name_raw = callback.data.split(":")[1]
+
+    # Находим оригинальное имя из SETS
+    all_items = [i for category in SETS.values() for set_name, set_data in category.items() for i in set_data["items"]]
+    item = next((i for i in all_items if i["name"].lower().replace(" ", "_") == item_name_raw), None)
+
+    if not item:
+        await callback.message.answer("❌ Ошибка: предмет не найден в базе.")
+        await callback.answer()
+        return
+
+    # Получаем данные из инвентаря
+    response = supabase.table("backpack") \
+        .select("item_name, count, upgrade") \
+        .eq("user_id", user_id) \
+        .eq("item_name", item["name"]) \
+        .execute()
+
+    item_data = response.data[0] if response.data else None
+    if not item_data or item_data["count"] <= 0:
+        await callback.message.answer(f"❌ Предмет <b>{item['name']}</b> не найден в инвентаре.", parse_mode="HTML")
+        await callback.answer()
+        return
+
+    current_upgrade = item_data.get("upgrade") or 0
+    next_upgrade = current_upgrade + 1
+
+    # Определяем тип: оружие или броня
+    if "weapon" in item:
+        key = "weapon"
+        base_stat = item.get("damage", 0)
+    else:
+        key = "armor"
+        base_stat = item.get("hp", 0)
+
+    # Текущая характеристика с учетом заточек
+    stat_now = base_stat + sum(
+        UPGRADES["levels"].get(f"+{i}", {}).get(key, {}).get("damage" if key == "weapon" else "hp", 0)
+        for i in range(1, current_upgrade + 1)
+    )
+
+    # Характеристика после следующей заточки
+    stat_after = stat_now + UPGRADES["levels"].get(f"+{next_upgrade}", {}).get(key, {}).get(
+        "damage" if key == "weapon" else "hp", 0)
+
+    # Шанс заточки и стоимость
+    chance = UPGRADES["levels"].get(f"+{next_upgrade}", {}).get("chance", 0)
+    cost = next_upgrade * 350
+    scroll_type = "редкий свиток" if next_upgrade > 5 else "обычный свиток"
+
+    # Строка для показа пользователю
+    stat_name = "⚔️ Урон" if key == "weapon" else "🩸 HP"
+    upgrade_str = f"+{current_upgrade}" if current_upgrade > 0 else ""
+
+    text = (
+        f"🔹 <b>{item['name']}</b> {upgrade_str}\n"
+        f"{stat_name}: {stat_now} ➡️ {stat_after}\n"
+        f"🎯 Шанс успеха: {chance}%\n"
+        f"💰 Стоимость: {cost} монет\n"
+        f"📜 Необходимый свиток: {scroll_type}"
+    )
+
+    # Кнопки
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚒️ Заточить", callback_data=f"do_upgrade:{item_name_raw}")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_inventory")]
+    ])
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    await callback.answer()
+
+# === Показ предмета с информацией о заточке ===
+@dp.callback_query(lambda c: c.data and c.data.startswith("upgrade_item:"))
+async def upgrade_item_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    item_name_raw = callback.data.split(":")[1]
+
+    # Находим оригинальное имя из SETS
+    all_items = [i for category in SETS.values() for set_name, set_data in category.items() for i in set_data["items"]]
+    item = next((i for i in all_items if i["name"].lower().replace(" ", "_") == item_name_raw), None)
+
+    if not item:
+        await callback.message.answer("❌ Ошибка: предмет не найден в базе.")
+        await callback.answer()
+        return
+
+    # Получаем данные из инвентаря
+    response = supabase.table("backpack") \
+        .select("item_name, count, upgrade") \
+        .eq("user_id", user_id) \
+        .eq("item_name", item["name"]) \
+        .execute()
+
+    item_data = response.data[0] if response.data else None
+    if not item_data or item_data["count"] <= 0:
+        await callback.message.answer(f"❌ Предмет <b>{item['name']}</b> не найден в инвентаре.", parse_mode="HTML")
+        await callback.answer()
+        return
+
+    current_upgrade = item_data.get("upgrade") or 0
+    next_upgrade = current_upgrade + 1
+
+    # Определяем тип: оружие или броня
+    if "weapon" in item:
+        key = "weapon"
+        base_stat = item.get("damage", 0)
+    else:
+        key = "armor"
+        base_stat = item.get("hp", 0)
+
+    # Текущая характеристика с учетом заточек
+    stat_now = base_stat + sum(
+        UPGRADES["levels"].get(f"+{i}", {}).get(key, {}).get("damage" if key == "weapon" else "hp", 0)
+        for i in range(1, current_upgrade + 1)
+    )
+
+    # Характеристика после следующей заточки
+    stat_after = stat_now + UPGRADES["levels"].get(f"+{next_upgrade}", {}).get(key, {}).get(
+        "damage" if key == "weapon" else "hp", 0)
+
+    # Шанс заточки и стоимость
+    chance = UPGRADES["levels"].get(f"+{next_upgrade}", {}).get("chance", 0)
+    cost = next_upgrade * 350
+    scroll_type = "редкий свиток" if next_upgrade > 5 else "обычный свиток"
+
+    # Строка для показа пользователю
+    stat_name = "⚔️ Урон" if key == "weapon" else "🩸 HP"
+    upgrade_str = f"+{current_upgrade}" if current_upgrade > 0 else ""
+
+    text = (
+        f"🔹 <b>{item['name']}</b> {upgrade_str}\n"
+        f"{stat_name}: {stat_now} ➡️ {stat_after}\n"
+        f"🎯 Шанс успеха: {chance}%\n"
+        f"💰 Стоимость: {cost} монет\n"
+        f"📜 Необходимый свиток: {scroll_type}"
+    )
+
+    # Кнопки
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="⚒️ Заточить",
+            callback_data=f"do_upgrade:{item_name_raw}:{current_upgrade}"  # передаем текущий уровень
+        )],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_inventory")]
+    ])
+
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    await callback.answer()
+
+
+# === Логика заточки предмета ===
+@dp.callback_query(lambda c: c.data and c.data.startswith("do_upgrade:"))
+async def do_upgrade_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    data_parts = callback.data.split(":")
+    if len(data_parts) != 3:
+        await callback.message.answer("❌ Неверные данные для апгрейда.")
+        await callback.answer()
+        return
+
+    item_name_raw = data_parts[1]
+    try:
+        current_upgrade = int(data_parts[2])
+    except ValueError:
+        await callback.message.answer("❌ Неверные данные для апгрейда.")
+        await callback.answer()
+        return
+
+    # Находим предмет
+    item = None
+    item_category = None
+    for category_name, category_data in SETS.items():
+        for set_name, set_data in category_data.items():
+            for i in set_data["items"]:
+                if i["name"].lower().replace(" ", "_") == item_name_raw.lower():
+                    item = i
+                    item_category = category_name
+                    break
+            if item:
+                break
+        if item:
+            break
+
+    if not item:
+        await callback.message.answer("❌ Ошибка: предмет не найден.")
+        await callback.answer()
+        return
+
+    # Получаем предмет игрока
+    response = supabase.table("backpack") \
+        .select("item_name, count, upgrade") \
+        .eq("user_id", user_id) \
+        .eq("item_name", item["name"]) \
+        .eq("upgrade", current_upgrade) \
+        .execute()
+
+    item_data = response.data[0] if response.data else None
+    if not item_data or item_data["count"] <= 0:
+        await callback.message.answer("❌ У вас нет этого предмета с данной заточкой.")
+        await callback.answer()
+        return
+
+    next_upgrade = current_upgrade + 1
+
+    # Лимиты
+    max_upgrade = {"weak": 5, "strong": 10, "crafter": 15}.get(item_category, 5)
+    if next_upgrade > max_upgrade:
+        await callback.message.answer(
+            f"⚠️ Предмет категории <b>{item_category}</b> нельзя заточить выше +{max_upgrade}.",
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        return
+
+    # Проверяем деньги
+    money_response = supabase.table("users").select("money").eq("user_id", user_id).execute()
+    money = money_response.data[0]["money"] if money_response.data else 0
+    cost = next_upgrade * 350
+    if money < cost:
+        await callback.message.answer("❌ Недостаточно монет.")
+        await callback.answer()
+        return
+
+    # Получаем шанс из таблицы UPGRADES
+    chance = UPGRADES["levels"].get(f"+{next_upgrade}", {}).get("chance", 0)
+    success = randint(1, 100) <= chance
+
+    # Списываем деньги
+    supabase.table("users").update({"money": money - cost}).eq("user_id", user_id).execute()
+
+    # Логика заточки
+    if success:
+        # Уменьшаем количество текущего предмета
+        new_count = item_data["count"] - 1
+        if new_count > 0:
+            supabase.table("backpack").update({"count": new_count}) \
+                .eq("user_id", user_id) \
+                .eq("item_name", item["name"]) \
+                .eq("upgrade", current_upgrade) \
+                .execute()
+        else:
+            supabase.table("backpack").delete() \
+                .eq("user_id", user_id) \
+                .eq("item_name", item["name"]) \
+                .eq("upgrade", current_upgrade) \
+                .execute()
+
+        # Проверяем, есть ли предмет с такой же следующей заточкой
+        upgraded_item = supabase.table("backpack") \
+            .select("count") \
+            .eq("user_id", user_id) \
+            .eq("item_name", item["name"]) \
+            .eq("upgrade", next_upgrade) \
+            .execute()
+
+        if upgraded_item.data:
+            new_upgraded_count = upgraded_item.data[0]["count"] + 1
+            supabase.table("backpack").update({"count": new_upgraded_count}) \
+                .eq("user_id", user_id) \
+                .eq("item_name", item["name"]) \
+                .eq("upgrade", next_upgrade) \
+                .execute()
+        else:
+            supabase.table("backpack").insert({
+                "user_id": user_id,
+                "item_name": item["name"],
+                "count": 1,
+                "upgrade": next_upgrade
+            }).execute()
+
+        text = f"✅ Успешная заточка! {item['name']} +{next_upgrade}"
+    else:
+        text = f"💥 Заточка не удалась! {item['name']} остался на +{current_upgrade}"
+
+    await callback.message.edit_text(text)
+    await callback.answer()
 
 @dp.callback_query(lambda c: c.data.startswith("user_lots_page_"))
 async def paginate_user_lots(callback_query: types.CallbackQuery):
@@ -2356,10 +2931,9 @@ async def handle_slot(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     slot = callback.data.replace("slot_", "")  # "head", "body", ...
 
-    items = get_user_backpack(user_id, supabase)  # Ваша функция для получения предметов из таблицы backpack
-    user_items = {item["item_name"]: item["count"] for item in items}
-
-    slot_items = get_items_by_slot(slot)  # Ваша функция, возвращающая список предметов для слота
+    items = get_user_backpack(user_id, supabase)
+    user_items = {item["item_name"]: item for item in items}
+    slot_items = get_items_by_slot(slot)
 
     slot_title = {
         "head": "🪖 Голова",
@@ -2377,16 +2951,31 @@ async def handle_slot(callback: types.CallbackQuery):
     for item in slot_items:
         name = item["name"]
         if name in user_items:
-            count = user_items[name]
-            hp = item.get("hp", 0)
-            dmg = item.get("damage", 0)
-            found = True
-            message_lines.append(
-                f"🔹 <b>{name}</b>\n"
-                f"    🩸 HP: <code>{hp}</code>\n"
-                f"    ⚔️ Урон: <code>{dmg}</code>\n"
-                f"    🎒 Количество: <code>{count}</code>\n"
-            )
+            item_data = user_items[name]
+            count = item_data.get("count", 0)
+            upgrade = item_data.get("upgrade") or 0  # Если None, ставим 0
+            base_hp = item.get("hp", 0)
+            base_dmg = item.get("damage", 0)
+
+            if count > 0:
+                found = True
+                upgrade_str = f" +{upgrade}" if upgrade > 0 else ""
+
+                total_hp = base_hp
+                total_dmg = base_dmg
+                for i in range(1, upgrade + 1   ):
+                    level_key = f"+{i}"
+                    if slot == "weapon":
+                        total_dmg += UPGRADES["levels"][level_key]["weapon"]["damage"]
+                    else:
+                        total_hp += UPGRADES["levels"][level_key]["armor"]["hp"]
+
+                message_lines.append(
+                    f"🔹 <b>{name}{upgrade_str}</b>\n"
+                    f"    🩸 HP: <code>{total_hp}</code>\n"
+                    f"    ⚔️ Урон: <code>{total_dmg}</code>\n"
+                    f"    🎒 Количество: <code>{count}</code>\n"
+                )
 
     if not found:
         message_lines.append("❌ У вас нет предметов в этом слоте.")
@@ -2396,7 +2985,6 @@ async def handle_slot(callback: types.CallbackQuery):
         parse_mode="HTML",
         reply_markup=backpack_keyboard
     )
-
 # Новый обработчик для ресурсов из таблицы materials
 @dp.callback_query(F.data == "view_resources")
 async def handle_resources(callback: types.CallbackQuery):
@@ -2940,71 +3528,84 @@ async def handle_craft_set_selection(call: types.CallbackQuery):
     )
 
 
-@dp.callback_query(lambda c: c.data.startswith("equip_"))
+@dp.callback_query(lambda c: c.data.startswith("equip:"))
 async def handle_item_selection(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    selected_item_callback = callback_query.data
+    _, item_name, upgrade_str = callback_query.data.split(":", 2)
+    item_upgrade = int(upgrade_str)
 
-    selected_item = None
+    # Находим категорию предмета в full_items
     item_category = None
-
-    # Поиск предмета в full_items
-    for category_name, category_data in full_items.items():
-        for item in category_data:
-            if item['callback_data'] == selected_item_callback:
-                selected_item = item
-                item_category = category_name
-                break
-        if selected_item:
+    for category_name, items in full_items.items():
+        if any(i['name'] == item_name for i in items):
+            item_category = category_name
             break
 
-    if not selected_item:
+    if not item_category:
         await callback_query.answer("❗ Предмет не найден.", show_alert=True)
         return
 
-    # Получаем данные пользователя
-    user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
-    if not user_data.data:
-        await callback_query.answer("❗ Пользователь не найден.", show_alert=True)
-        return
-
-    # Проверка, не надето ли уже что-то в этом слоте
-    current_equipped = user_data.data.get(item_category)
-    if current_equipped and current_equipped != "нет":
-        await callback_query.answer(f"⛔ Уже надето: {current_equipped}", show_alert=True)
-        return
-
-    # Проверка, есть ли предмет в рюкзаке
-    item_name = selected_item["name"]
-    backpack_entry = supabase.table("backpack").select("count")\
-        .eq("user_id", user_id).eq("item_name", item_name).single().execute()
+    # Проверяем наличие конкретной версии в backpack
+    backpack_entry = supabase.table("backpack").select("count").eq("user_id", user_id)\
+        .eq("item_name", item_name).eq("upgrade", item_upgrade).single().execute()
 
     if not backpack_entry.data or backpack_entry.data["count"] < 1:
         await callback_query.answer("❗ У вас нет этого предмета.", show_alert=True)
         return
 
-    new_count = backpack_entry.data["count"] - 1
+    item_count = backpack_entry.data["count"]
 
-    # Уменьшаем количество или удаляем предмет из рюкзака
-    if new_count == 0:
-        supabase.table("backpack").delete().eq("user_id", user_id).eq("item_name", item_name).execute()
+    # Обновляем количество
+    if item_count > 1:
+        supabase.table("backpack").update({"count": item_count - 1})\
+            .eq("user_id", user_id).eq("item_name", item_name).eq("upgrade", item_upgrade).execute()
     else:
-        supabase.table("backpack").update({"count": new_count})\
-            .eq("user_id", user_id).eq("item_name", item_name).execute()
+        supabase.table("backpack").delete()\
+            .eq("user_id", user_id).eq("item_name", item_name).eq("upgrade", item_upgrade).execute()
 
     # Получаем характеристики предмета
     hp_bonus, damage_bonus = get_item_stats(item_name)
 
-    # Обновляем экипировку и характеристики пользователя
+    # Бонус от заточки (кумулятивно)
+    total_hp_bonus = total_damage_bonus = 0
+    for lvl in range(1, item_upgrade + 1):
+        key = f"+{lvl}"
+        if key in UPGRADES["levels"]:
+            up = UPGRADES["levels"][key]
+            if item_category == "weapon":
+                total_damage_bonus += up["weapon"]["damage"]
+            else:
+                total_hp_bonus += up["armor"]["hp"]
+
+    hp_bonus += total_hp_bonus
+    damage_bonus += total_damage_bonus
+
+    # Получаем данные игрока
+    user_data = supabase.table("users").select("*").eq("user_id", user_id).single().execute()
+    if not user_data.data:
+        await callback_query.answer("❗ Пользователь не найден.", show_alert=True)
+        return
+
+    # Обновляем экипировку и характеристики
+    upgrade_column = f"upgrade_{item_category}"
+
     supabase.table("users").update({
         item_category: item_name,
+        upgrade_column: item_upgrade,
         "health": user_data.data.get("health", 0) + hp_bonus,
         "attack": user_data.data.get("attack", 0) + damage_bonus
     }).eq("user_id", user_id).execute()
 
     await callback_query.message.edit_reply_markup()
-    await callback_query.message.answer(f"✅ Надето: <b>{item_name}</b>")
 
+    # Ответ пользователю
+    if item_upgrade > 0:
+        await callback_query.message.answer(
+            f"✅ Надето: <b>{item_name}</b> (+{item_upgrade})\n"
+            f"🔧 Бонус: {'+' + str(total_damage_bonus) + ' урона' if item_category == 'weapon' else '+' + str(total_hp_bonus) + ' HP'}"
+        )
+    else:
+        await callback_query.message.answer(f"✅ Надето: <b>{item_name}</b>")
 @dp.callback_query()
 async def handle_clan_callbacks(callback: types.CallbackQuery):
     user_id = callback.from_user.id
