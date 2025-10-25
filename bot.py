@@ -2,7 +2,6 @@ import os
 import asyncio
 import re
 import random
-import json
 from random import randint
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -171,30 +170,6 @@ async def notify_users_on_start():
     print("Бот запущен и уведомляет пользователей...")
     # Тут можна зробити розсилку або інші дії
 
-
-# Функция обработки входящих webhook запросов
-async def handle_webhook(reader, writer):
-    data = await reader.read(1024)
-    if data:
-
-        data_json = json.loads(data.decode())
-        print(f"Received data: {data_json}")
-
-        writer.write(b"OK")
-        await writer.drain()
-
-    writer.close()
-
-async def run_server():
-    server = await asyncio.start_server(
-        handle_webhook, '0.0.0.0', int(os.environ.get('PORT', 5000))
-    )
-    addr = server.sockets[0].getsockname()
-    print(f"Server started on {addr}")
-
-    # Ожидаем завершения работы сервера
-    async with server:
-        await server.serve_forever()
 
 async def broadcast_battle_results():
     try:
@@ -3827,8 +3802,8 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
 async def main():
     await notify_users_on_start()
     asyncio.create_task(scheduler())
-    asyncio.create_task(run_server())
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
