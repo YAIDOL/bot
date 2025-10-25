@@ -1,4 +1,3 @@
 aiogram==3.*
 supabase==2.*
 python-dotenv==1.*
-Flask==2.2.3
