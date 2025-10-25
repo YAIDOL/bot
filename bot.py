@@ -2,9 +2,7 @@ import os
 import asyncio
 import re
 import random
-import logging
 from random import randint
-from flask import Flask, request
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types, F
@@ -16,17 +14,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 
-
 # ---------- Load environment ----------
-app = Flask(__name__)
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.json  # Здесь будет обработка входящих данных
-    # Логика обработки webhook
-    return "OK", 200
-
-
 user_states = {}
 ITEMS_PER_PAGE = 5
 ITEMS_PER_PAGE = 5
@@ -3814,11 +3802,6 @@ async def handle_clan_callbacks(callback: types.CallbackQuery):
 async def main():
     await notify_users_on_start()
     asyncio.create_task(scheduler())
-
-    # Проверяем, нужен ли нам порт (например, для webhook)
-    port = int(os.environ.get('PORT', 5000))  # Порт по умолчанию — 5000, если переменная не задана
-
-    # Для polling Render не требует порта, поэтому просто запускаем polling
     await dp.start_polling(bot)
 
 
